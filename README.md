@@ -151,7 +151,7 @@ Gestión completa de proyectos de mejora con metodología A3 Thinking.
 Mapeo de flujo de valor para identificar desperdicios.
 
 **Funcionalidades:**
-- ✅ Registro de procesos mapeados en MIRO
+- ✅ Registro de procesos mapeados
 - ✅ Carga de imágenes de diagrama VSM
 - ✅ Descripción de estado actual vs estado futuro
 - ✅ Seguimiento de estados con ticker visual
@@ -371,7 +371,7 @@ Para consultas, demostraciones o implementación personalizada:
 
 ## 📄 Licencia
 
-Este proyecto es propietario. Todos los derechos reservados © 2024.
+Este proyecto es propietario. Todos los derechos reservados © 2025.
 
 Para uso comercial o personalización, contactar al desarrollador.
 

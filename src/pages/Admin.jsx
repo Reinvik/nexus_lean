@@ -5,6 +5,7 @@ import { Trash2, Building, Users, CheckCircle, XCircle } from 'lucide-react';
 const AdminPage = () => {
     const { user, companies, addCompany, removeCompany, removeUser, adminAuthorizeUser, getAllUsers, updateUserRole, updateUserCompany, refreshData, repairAdminProfile } = useAuth();
     const [newCompanyName, setNewCompanyName] = useState('');
+    const [newCompanyDomain, setNewCompanyDomain] = useState('');
     const [localUsers, setLocalUsers] = useState([]);
     const [loadingUsers, setLoadingUsers] = useState(true);
     const [filterCompanyId, setFilterCompanyId] = useState('all');
@@ -31,10 +32,10 @@ const AdminPage = () => {
 
     const handleAddCompany = async (e) => {
         e.preventDefault();
-        if (newCompanyName.trim()) {
-            const domain = newCompanyName.toLowerCase().replace(/\s+/g, '') + '.cl';
-            await addCompany(newCompanyName, domain);
+        if (newCompanyName.trim() && newCompanyDomain.trim()) {
+            await addCompany(newCompanyName, newCompanyDomain.toLowerCase().trim());
             setNewCompanyName('');
+            setNewCompanyDomain('');
         }
     };
 
@@ -224,7 +225,14 @@ const AdminPage = () => {
                             value={newCompanyName}
                             onChange={(e) => setNewCompanyName(e.target.value)}
                         />
-                        <button type="submit" className="btn-primary" disabled={!newCompanyName.trim()}>
+                        <input
+                            type="text"
+                            className="input-field"
+                            placeholder="Dominio (ej: empresa.cl o empresa.com)"
+                            value={newCompanyDomain}
+                            onChange={(e) => setNewCompanyDomain(e.target.value)}
+                        />
+                        <button type="submit" className="btn-primary" disabled={!newCompanyName.trim() || !newCompanyDomain.trim()}>
                             Agregar Empresa
                         </button>
                     </form>

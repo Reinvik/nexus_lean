@@ -5,9 +5,10 @@ import HeaderWithFilter from '../components/HeaderWithFilter';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
 import { Activity, CheckCircle, TrendingUp, Zap, ClipboardList, Target, Clock, Maximize2, Minimize2 } from 'lucide-react';
 import StatCard from '../components/StatCard';
+import AIConsultant from '../components/AIConsultant';
 
 const Dashboard = () => {
-    const { user, globalFilterCompanyId } = useAuth();
+    const { user, globalFilterCompanyId, companies } = useAuth();
     const [data, setData] = useState({ fiveS: [], quickWins: [], vsms: [], a3: [] });
     const [isFullScreen, setIsFullScreen] = useState(false);
 
@@ -507,7 +508,6 @@ const Dashboard = () => {
                 </div>
 
                 {/* 5S Status Distribution - 1/3 Width */}
-                {/* 5S Status Distribution - 1/3 Width */}
                 <div className="bg-white p-6 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all border border-slate-100 lg:col-span-1 flex flex-col justify-between">
                     <h4 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-6 z-10 flex items-center gap-2">
                         <CheckCircle size={16} className="text-emerald-500" /> Estado de Hallazgos 5S
@@ -638,6 +638,45 @@ const Dashboard = () => {
                     </div>
                 </div>
             </div>
+
+            {/* AI Consultant Section - Admin Only (for now) */}
+            {(user?.role === 'admin' || user?.email === 'ariel.mellag@gmail.com') && (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div className="lg:col-span-2">
+                        <AIConsultant
+                            data={{
+                                fiveS: filteredData.fiveS,
+                                quickWins: filteredData.quickWins,
+                                vsms: filteredData.vsms,
+                                a3: filteredData.a3
+                            }}
+                            companyName={companies?.find(c => c.id === globalFilterCompanyId)?.name || 'Todas las Empresas'}
+                            apiKey={import.meta.env.VITE_GEMINI_API_KEY}
+                        />
+                    </div>
+                    <div className="bg-white p-6 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 h-fit">
+                        <h4 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-4">Resumen Rápido</h4>
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                                <span className="text-sm text-slate-600">Tasa Cierre 5S</span>
+                                <span className="font-bold text-emerald-600">{metrics.fiveS.rate}%</span>
+                            </div>
+                            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                                <span className="text-sm text-slate-600">Quick Wins Activas</span>
+                                <span className="font-bold text-amber-600">{metrics.quickWins.total - metrics.quickWins.done}</span>
+                            </div>
+                            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                                <span className="text-sm text-slate-600">Proyectos A3 Activos</span>
+                                <span className="font-bold text-indigo-600">{metrics.a3.total - metrics.a3.closed}</span>
+                            </div>
+                            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                                <span className="text-sm text-slate-600">Avance Plan Acción</span>
+                                <span className="font-bold text-purple-600">{metrics.a3.rate}%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

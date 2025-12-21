@@ -37,14 +37,28 @@ const RegisterPage = () => {
         }
 
         // Auto-assign company based on email domain
-        const lowerEmail = formData.email.toLowerCase();
+        const lowerEmail = formData.email.toLowerCase().trim();
         const emailDomain = lowerEmail.split('@')[1];
-        let assignedCompany = companies.find(c => c.domain === emailDomain);
+
+        // Wait for companies to load
+        if (!companies || companies.length === 0) {
+            setError('Cargando empresas... Por favor intenta de nuevo en un momento.');
+            return;
+        }
+
+        // Find company by domain (flexible matching - trim and lowercase both sides)
+        let assignedCompany = companies.find(c => {
+            const companyDomain = (c.domain || '').toLowerCase().trim();
+            return companyDomain === emailDomain;
+        });
         let companyId = assignedCompany ? assignedCompany.id : null;
 
-        // Allow specific admin email and cial.cl to bypass domain check temporarily or if mapped manually
-        if (!assignedCompany && lowerEmail !== 'ariel.mellag@gmail.com' && emailDomain !== 'cial.cl') {
-            setError('El dominio del correo no pertenece a una empresa registrada en el sistema.');
+        // Debug log for troubleshooting
+        console.log('Registration attempt:', { emailDomain, companies: companies.map(c => c.domain), foundCompany: assignedCompany?.name });
+
+        // Allow specific admin email to bypass domain check
+        if (!assignedCompany && lowerEmail !== 'ariel.mellag@gmail.com') {
+            setError(`El dominio "${emailDomain}" no pertenece a una empresa registrada. Contacta al administrador.`);
             return;
         }
 
