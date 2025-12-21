@@ -22,6 +22,7 @@ export const AuthProvider = ({ children }) => {
     // Fetch companies on load
     const fetchCompanies = async () => {
         try {
+            console.log("AuthContext: Fetching companies...");
             const { data, error } = await supabase
                 .from('companies')
                 .select('*');
@@ -29,6 +30,7 @@ export const AuthProvider = ({ children }) => {
                 console.error("AuthContext: Error fetching companies:", error);
                 return;
             }
+            console.log("AuthContext: Companies loaded:", data?.length, data);
             if (data) setCompanies(data);
         } catch (err) {
             console.error("AuthContext: Unexpected error fetching companies:", err);
