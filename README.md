@@ -151,7 +151,7 @@ Gestión completa de proyectos de mejora con metodología A3 Thinking.
 Mapeo de flujo de valor para identificar desperdicios.
 
 **Funcionalidades:**
-- ✅ Registro de procesos mapeados
+- ✅ Registro de procesos mapeados en MIRO
 - ✅ Carga de imágenes de diagrama VSM
 - ✅ Descripción de estado actual vs estado futuro
 - ✅ Seguimiento de estados con ticker visual
@@ -365,8 +365,7 @@ El diseño de Nexus BE LEAN sigue principios modernos:
 Para consultas, demostraciones o implementación personalizada:
 
 📧 **Email**: ariel.mellag@gmail.com  
-💼 **LinkedIn**: [Conectar](#)  
-🌐 **Web**: [En construcción](#)
+
 
 ---
 
