@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Plus, Trash2, TrendingUp, TrendingDown, Settings, Maximize2, Minimize2, Calendar, Target } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, AreaChart, Area } from 'recharts';
+import { Plus, Trash2, TrendingUp, TrendingDown, Settings, Maximize2, Minimize2, Calendar, Target, Activity, Gauge } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, AreaChart, Area, BarChart, Bar } from 'recharts';
 
 const A3FollowUp = ({ data = {}, onChange }) => {
     const [showConfig, setShowConfig] = useState(false);
@@ -13,15 +13,50 @@ const A3FollowUp = ({ data = {}, onChange }) => {
         dataPoints = [],
         isPercentage = false,
         dateFormat = 'date', // 'date', 'month'
-        interventionDate = ''
+        interventionDate = '',
+        kpiType = 'simple', // 'simple' or 'oee'
+        oeeConfig = {
+            standardSpeed: 100, // piezas/hora
+            shiftDuration: 8    // horas por turno
+        }
     } = data;
 
     const handleChange = (field, value) => {
         onChange(field, value);
     };
 
+    // Calculate OEE metrics for a data point
+    const calculateOEE = (point) => {
+        const availableTime = parseFloat(point.availableTime) || 0;
+        const productiveTime = parseFloat(point.productiveTime) || 0;
+        const producedPieces = parseFloat(point.producedPieces) || 0;
+        const defectPieces = parseFloat(point.defectPieces) || 0;
+        const standardSpeed = parseFloat(oeeConfig.standardSpeed) || 100;
+
+        // Avoid division by zero
+        const availability = availableTime > 0 ? (productiveTime / availableTime) * 100 : 0;
+        const theoreticalOutput = productiveTime * standardSpeed;
+        const performance = theoreticalOutput > 0 ? (producedPieces / theoreticalOutput) * 100 : 0;
+        const quality = producedPieces > 0 ? ((producedPieces - defectPieces) / producedPieces) * 100 : 0;
+        const oee = (availability * performance * quality) / 10000;
+
+        return {
+            availability: Math.round(availability * 10) / 10,
+            performance: Math.round(performance * 10) / 10,
+            quality: Math.round(quality * 10) / 10,
+            oee: Math.round(oee * 10) / 10
+        };
+    };
+
     const addDataPoint = () => {
-        const newPoint = {
+        const newPoint = kpiType === 'oee' ? {
+            id: Date.now(),
+            date: new Date().toISOString().split('T')[0],
+            availableTime: oeeConfig.shiftDuration || 8,
+            productiveTime: 0,
+            producedPieces: 0,
+            defectPieces: 0
+        } : {
             id: Date.now(),
             date: new Date().toISOString().split('T')[0],
             value: 0
@@ -64,12 +99,41 @@ const A3FollowUp = ({ data = {}, onChange }) => {
         chartData.push({ date: interventionDate, value: null }); // Null value so it doesn't plot a point but exists on axis
     }
 
+    // For simple KPI mode
     const sortedData = chartData
         .sort((a, b) => new Date(a.date) - new Date(b.date))
         .map(point => ({
             date: point.date,
             value: point.value !== null ? (parseFloat(point.value) || 0) : null
         }));
+
+    // For OEE mode - calculate metrics for each data point
+    const sortedOEEData = kpiType === 'oee' ? chartData
+        .filter(p => p.availableTime !== undefined) // Only OEE points
+        .sort((a, b) => new Date(a.date) - new Date(b.date))
+        .map(point => {
+            const metrics = calculateOEE(point);
+            return {
+                date: point.date,
+                ...metrics
+            };
+        }) : [];
+
+    // Get current OEE metrics (last data point)
+    const currentOEEMetrics = sortedOEEData.length > 0 ? sortedOEEData[sortedOEEData.length - 1] : null;
+
+    // Get color based on OEE value
+    const getOEEColor = (value, type = 'oee') => {
+        if (type === 'oee') {
+            if (value >= 85) return 'text-emerald-600 bg-emerald-50 border-emerald-200';
+            if (value >= 60) return 'text-amber-600 bg-amber-50 border-amber-200';
+            return 'text-rose-600 bg-rose-50 border-rose-200';
+        }
+        // For sub-metrics (availability, performance, quality)
+        if (value >= 90) return 'text-emerald-600';
+        if (value >= 70) return 'text-amber-600';
+        return 'text-rose-600';
+    };
 
     return (
         <div className="space-y-6">
@@ -97,13 +161,60 @@ const A3FollowUp = ({ data = {}, onChange }) => {
                     {/* CONFIGURATION PANEL (Collapsible) */}
                     {showConfig && (
                         <div className="p-5 bg-slate-50 border-b border-slate-200 animate-in slide-in-from-top-2 duration-200">
+                            {/* KPI Type Selector */}
+                            <div className="mb-4">
+                                <label className="text-xs font-bold text-slate-500 uppercase mb-1.5 block">Tipo de Indicador</label>
+                                <div className="flex bg-white rounded-lg border border-slate-200 p-1">
+                                    <button
+                                        onClick={() => handleChange('kpiType', 'simple')}
+                                        className={`flex-1 flex items-center justify-center gap-2 text-xs font-bold py-2 rounded-md transition-all ${kpiType === 'simple' ? 'bg-slate-100 text-slate-700 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                                    >
+                                        <TrendingUp size={14} /> KPI Simple
+                                    </button>
+                                    <button
+                                        onClick={() => handleChange('kpiType', 'oee')}
+                                        className={`flex-1 flex items-center justify-center gap-2 text-xs font-bold py-2 rounded-md transition-all ${kpiType === 'oee' ? 'bg-cyan-50 text-cyan-700 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                                    >
+                                        <Gauge size={14} /> OEE
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* OEE Specific Config */}
+                            {kpiType === 'oee' && (
+                                <div className="mb-4 p-3 bg-cyan-50 border border-cyan-100 rounded-lg">
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="text-xs font-bold text-cyan-700 uppercase mb-1 block">Velocidad Estándar (pzs/hr)</label>
+                                            <input
+                                                type="number"
+                                                className="w-full px-3 py-2 bg-white border border-cyan-200 rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none text-sm"
+                                                placeholder="100"
+                                                value={oeeConfig.standardSpeed}
+                                                onChange={(e) => handleChange('oeeConfig', { ...oeeConfig, standardSpeed: parseFloat(e.target.value) || 100 })}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs font-bold text-cyan-700 uppercase mb-1 block">Duración Turno (hrs)</label>
+                                            <input
+                                                type="number"
+                                                className="w-full px-3 py-2 bg-white border border-cyan-200 rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none text-sm"
+                                                placeholder="8"
+                                                value={oeeConfig.shiftDuration}
+                                                onChange={(e) => handleChange('oeeConfig', { ...oeeConfig, shiftDuration: parseFloat(e.target.value) || 8 })}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 <div>
-                                    <label className="text-xs font-bold text-slate-500 uppercase mb-1.5 block">Nombre del KPI</label>
+                                    <label className="text-xs font-bold text-slate-500 uppercase mb-1.5 block">{kpiType === 'oee' ? 'Nombre (Línea/Máquina)' : 'Nombre del KPI'}</label>
                                     <input
                                         type="text"
                                         className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm transition-all shadow-sm"
-                                        placeholder="Ej: Tiempo de cambio (min)"
+                                        placeholder={kpiType === 'oee' ? 'Ej: Línea 1' : 'Ej: Tiempo de cambio (min)'}
                                         value={kpiName}
                                         onChange={(e) => handleChange('kpiName', e.target.value)}
                                     />
@@ -206,8 +317,44 @@ const A3FollowUp = ({ data = {}, onChange }) => {
                     {/* METRICS SUMMARY & CHART */}
                     <div className="p-6 flex-1 min-h-[320px] flex flex-col">
 
-                        {/* Big Value Display */}
-                        {sortedData.length > 0 && (
+                        {/* OEE Cards Display */}
+                        {kpiType === 'oee' && currentOEEMetrics && (
+                            <div className="mb-4">
+                                <div className="grid grid-cols-4 gap-3">
+                                    {/* Availability Card */}
+                                    <div className="bg-white border border-slate-200 rounded-xl p-3 text-center shadow-sm">
+                                        <div className={`text-2xl font-black ${getOEEColor(currentOEEMetrics.availability, 'sub')}`}>
+                                            {currentOEEMetrics.availability}%
+                                        </div>
+                                        <div className="text-[10px] font-bold text-slate-400 uppercase mt-1">Disponibilidad</div>
+                                    </div>
+                                    {/* Performance Card */}
+                                    <div className="bg-white border border-slate-200 rounded-xl p-3 text-center shadow-sm">
+                                        <div className={`text-2xl font-black ${getOEEColor(currentOEEMetrics.performance, 'sub')}`}>
+                                            {currentOEEMetrics.performance}%
+                                        </div>
+                                        <div className="text-[10px] font-bold text-slate-400 uppercase mt-1">Rendimiento</div>
+                                    </div>
+                                    {/* Quality Card */}
+                                    <div className="bg-white border border-slate-200 rounded-xl p-3 text-center shadow-sm">
+                                        <div className={`text-2xl font-black ${getOEEColor(currentOEEMetrics.quality, 'sub')}`}>
+                                            {currentOEEMetrics.quality}%
+                                        </div>
+                                        <div className="text-[10px] font-bold text-slate-400 uppercase mt-1">Calidad</div>
+                                    </div>
+                                    {/* OEE Card */}
+                                    <div className={`rounded-xl p-3 text-center shadow-sm border ${getOEEColor(currentOEEMetrics.oee, 'oee')}`}>
+                                        <div className="text-2xl font-black">
+                                            {currentOEEMetrics.oee}%
+                                        </div>
+                                        <div className="text-[10px] font-bold uppercase mt-1 opacity-70">OEE</div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Simple KPI Big Value Display */}
+                        {kpiType !== 'oee' && sortedData.length > 0 && (
                             <div className="mb-4">
                                 <div className="flex items-baseline gap-3">
                                     <span className="text-5xl font-black text-slate-700 tracking-tight">
@@ -231,7 +378,53 @@ const A3FollowUp = ({ data = {}, onChange }) => {
                         )}
 
                         <div className="flex-1 w-full min-h-[240px]">
-                            {sortedData.length > 0 ? (
+                            {/* OEE Chart */}
+                            {kpiType === 'oee' && sortedOEEData.length > 0 ? (
+                                <ResponsiveContainer width="100%" height={280}>
+                                    <LineChart data={sortedOEEData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                                        <XAxis
+                                            dataKey="date"
+                                            tickFormatter={formatXAxis}
+                                            tick={{ fontSize: 10, fill: '#94a3b8' }}
+                                            tickLine={false}
+                                            axisLine={false}
+                                        />
+                                        <YAxis
+                                            tick={{ fontSize: 11, fill: '#94a3b8' }}
+                                            tickLine={false}
+                                            axisLine={false}
+                                            domain={[0, 100]}
+                                            tickFormatter={(v) => `${v}%`}
+                                        />
+                                        <Tooltip
+                                            contentStyle={{
+                                                backgroundColor: 'white',
+                                                border: 'none',
+                                                borderRadius: '12px',
+                                                fontSize: '12px',
+                                                boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'
+                                            }}
+                                            formatter={(value, name) => [`${value}%`, name]}
+                                            labelFormatter={(label) => formatXAxis(label)}
+                                        />
+                                        <Legend wrapperStyle={{ paddingTop: '10px' }} />
+                                        {kpiGoal && !isNaN(parseFloat(kpiGoal)) && (
+                                            <ReferenceLine
+                                                y={parseFloat(kpiGoal)}
+                                                stroke="#10b981"
+                                                strokeDasharray="4 4"
+                                                strokeWidth={2}
+                                                label={{ value: `Meta: ${kpiGoal}%`, position: 'right', fill: '#10b981', fontSize: 10, fontWeight: 'bold' }}
+                                            />
+                                        )}
+                                        <Line type="monotone" dataKey="oee" stroke="#06b6d4" strokeWidth={3} name="OEE" dot={{ fill: '#06b6d4', r: 4 }} />
+                                        <Line type="monotone" dataKey="availability" stroke="#3b82f6" strokeWidth={1.5} strokeDasharray="3 3" name="Disponibilidad" dot={false} />
+                                        <Line type="monotone" dataKey="performance" stroke="#f59e0b" strokeWidth={1.5} strokeDasharray="3 3" name="Rendimiento" dot={false} />
+                                        <Line type="monotone" dataKey="quality" stroke="#10b981" strokeWidth={1.5} strokeDasharray="3 3" name="Calidad" dot={false} />
+                                    </LineChart>
+                                </ResponsiveContainer>
+                            ) : kpiType !== 'oee' && sortedData.length > 0 ? (
                                 <ResponsiveContainer width="100%" height={320}>
                                     <AreaChart data={sortedData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                                         <defs>
@@ -255,7 +448,7 @@ const A3FollowUp = ({ data = {}, onChange }) => {
                                             tickLine={false}
                                             axisLine={false}
                                             dx={-10}
-                                            domain={['auto', 'auto']} // Auto scale even for percentages as requested
+                                            domain={['auto', 'auto']}
                                         />
                                         <Tooltip
                                             contentStyle={{
@@ -310,16 +503,16 @@ const A3FollowUp = ({ data = {}, onChange }) => {
                                             fill="url(#colorValue)"
                                             name={kpiName || 'Valor Real'}
                                             activeDot={{ r: 6, strokeWidth: 0, fill: '#2563eb' }}
-                                            connectNulls={true} // Important so the line ignores the injected null point
+                                            connectNulls={true}
                                         />
                                     </AreaChart>
                                 </ResponsiveContainer>
                             ) : (
                                 <div className="h-full w-full flex flex-col items-center justify-center text-slate-300 gap-4 border-2 border-dashed border-slate-100 rounded-xl bg-slate-50/50">
-                                    <TrendingUp size={48} className="opacity-20" />
+                                    {kpiType === 'oee' ? <Gauge size={48} className="opacity-20" /> : <TrendingUp size={48} className="opacity-20" />}
                                     <div className="text-center">
                                         <p className="font-medium text-slate-400">Sin datos para mostrar</p>
-                                        <p className="text-xs">Agrega registros en la tabla lateral para generar el gráfico</p>
+                                        <p className="text-xs">{kpiType === 'oee' ? 'Agrega registros OEE para ver el gráfico' : 'Agrega registros en la tabla lateral para generar el gráfico'}</p>
                                     </div>
                                 </div>
                             )}
@@ -344,7 +537,90 @@ const A3FollowUp = ({ data = {}, onChange }) => {
                             <div className="h-40 flex items-center justify-center text-slate-400 text-xs italic p-4 text-center">
                                 No hay registros. Comienza agregando un dato.
                             </div>
+                        ) : kpiType === 'oee' ? (
+                            /* OEE Data Table */
+                            <table className="w-full text-sm">
+                                <thead className="bg-cyan-50 border-b border-cyan-100 sticky top-0 z-10">
+                                    <tr>
+                                        <th className="text-left px-2 py-2 text-[9px] font-bold text-cyan-700 uppercase">Fecha</th>
+                                        <th className="text-center px-1 py-2 text-[9px] font-bold text-cyan-700 uppercase">T.Disp</th>
+                                        <th className="text-center px-1 py-2 text-[9px] font-bold text-cyan-700 uppercase">T.Prod</th>
+                                        <th className="text-center px-1 py-2 text-[9px] font-bold text-cyan-700 uppercase">Piezas</th>
+                                        <th className="text-center px-1 py-2 text-[9px] font-bold text-cyan-700 uppercase">Defec.</th>
+                                        <th className="text-center px-1 py-2 text-[9px] font-bold text-cyan-700 uppercase">OEE</th>
+                                        <th className="w-8"></th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {dataPoints
+                                        .filter(p => p.availableTime !== undefined)
+                                        .sort((a, b) => new Date(b.date) - new Date(a.date))
+                                        .map(point => {
+                                            const metrics = calculateOEE(point);
+                                            return (
+                                                <tr key={point.id} className="group hover:bg-slate-50 transition-colors">
+                                                    <td className="px-2 py-1.5">
+                                                        <input
+                                                            type="date"
+                                                            className="w-full bg-transparent border-none p-0 text-[10px] font-medium text-slate-600 focus:ring-0"
+                                                            value={point.date}
+                                                            onChange={(e) => updateDataPoint(point.id, 'date', e.target.value)}
+                                                        />
+                                                    </td>
+                                                    <td className="px-1 py-1.5">
+                                                        <input
+                                                            type="number"
+                                                            step="0.1"
+                                                            className="w-12 text-center bg-transparent border border-transparent hover:border-slate-200 focus:border-cyan-500 rounded px-1 py-0.5 text-[10px] font-medium focus:ring-1 focus:ring-cyan-500 outline-none"
+                                                            value={point.availableTime}
+                                                            onChange={(e) => updateDataPoint(point.id, 'availableTime', e.target.value)}
+                                                        />
+                                                    </td>
+                                                    <td className="px-1 py-1.5">
+                                                        <input
+                                                            type="number"
+                                                            step="0.1"
+                                                            className="w-12 text-center bg-transparent border border-transparent hover:border-slate-200 focus:border-cyan-500 rounded px-1 py-0.5 text-[10px] font-medium focus:ring-1 focus:ring-cyan-500 outline-none"
+                                                            value={point.productiveTime}
+                                                            onChange={(e) => updateDataPoint(point.id, 'productiveTime', e.target.value)}
+                                                        />
+                                                    </td>
+                                                    <td className="px-1 py-1.5">
+                                                        <input
+                                                            type="number"
+                                                            className="w-14 text-center bg-transparent border border-transparent hover:border-slate-200 focus:border-cyan-500 rounded px-1 py-0.5 text-[10px] font-medium focus:ring-1 focus:ring-cyan-500 outline-none"
+                                                            value={point.producedPieces}
+                                                            onChange={(e) => updateDataPoint(point.id, 'producedPieces', e.target.value)}
+                                                        />
+                                                    </td>
+                                                    <td className="px-1 py-1.5">
+                                                        <input
+                                                            type="number"
+                                                            className="w-12 text-center bg-transparent border border-transparent hover:border-slate-200 focus:border-cyan-500 rounded px-1 py-0.5 text-[10px] font-medium focus:ring-1 focus:ring-cyan-500 outline-none"
+                                                            value={point.defectPieces}
+                                                            onChange={(e) => updateDataPoint(point.id, 'defectPieces', e.target.value)}
+                                                        />
+                                                    </td>
+                                                    <td className="px-1 py-1.5 text-center">
+                                                        <span className={`text-[10px] font-bold ${getOEEColor(metrics.oee, 'sub')}`}>
+                                                            {metrics.oee}%
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-1 py-1.5">
+                                                        <button
+                                                            onClick={() => deleteDataPoint(point.id)}
+                                                            className="text-slate-300 hover:text-rose-500 p-1 rounded-md hover:bg-rose-50 opacity-0 group-hover:opacity-100 transition-all"
+                                                        >
+                                                            <Trash2 size={12} />
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                </tbody>
+                            </table>
                         ) : (
+                            /* Simple KPI Data Table */
                             <table className="w-full text-sm">
                                 <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
                                     <tr>

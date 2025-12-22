@@ -154,18 +154,30 @@ export const prepareCompanyData = (data, companyName = 'Cliente') => {
     const actionPlanRate = totalActions > 0 ? Math.round((completedActions / totalActions) * 100) : 0;
 
     // Detailed A3 info for analysis
-    const a3Details = a3.filter(p => p.status !== 'Cerrado').map(p => ({
-        title: p.title,
-        status: p.status,
-        responsible: p.responsible,
-        hasGoal: !!(p.goal && p.goal.trim().length > 10),
-        hasIshikawa: !!(p.ishikawas && p.ishikawas.length > 0 && p.ishikawas[0]?.problem),
-        ishikawaProblem: p.ishikawas?.[0]?.problem || null,
-        hasFiveWhys: !!(p.multipleFiveWhys && p.multipleFiveWhys.length > 0),
-        actionCount: p.actionPlan?.length || 0,
-        actionsCompleted: p.actionPlan?.filter(a => a.status === 'done').length || 0,
-        hasCharts: !!(p.followUpData && p.followUpData.length > 0 && p.followUpData[0]?.dataPoints?.length > 0)
-    }));
+    const a3Details = a3.filter(p => p.status !== 'Cerrado').map(p => {
+        // Check if Ishikawa has content - either problem text OR causes in categories
+        const hasIshikawaContent = !!(p.ishikawas && p.ishikawas.length > 0 && (
+            // Check if first ishikawa has problem defined
+            (p.ishikawas[0]?.problem && p.ishikawas[0].problem.trim().length > 0) ||
+            // OR check if there are any causes in any category
+            (p.ishikawas[0]?.categories && Object.values(p.ishikawas[0].categories).some(
+                causes => Array.isArray(causes) && causes.length > 0
+            ))
+        ));
+
+        return {
+            title: p.title,
+            status: p.status,
+            responsible: p.responsible,
+            hasGoal: !!(p.goal && p.goal.trim().length > 0),
+            hasIshikawa: hasIshikawaContent,
+            ishikawaProblem: p.ishikawas?.[0]?.problem || null,
+            hasFiveWhys: !!(p.multipleFiveWhys && p.multipleFiveWhys.length > 0),
+            actionCount: p.actionPlan?.length || 0,
+            actionsCompleted: p.actionPlan?.filter(a => a.status === 'done').length || 0,
+            hasCharts: !!(p.followUpData && p.followUpData.length > 0 && p.followUpData[0]?.dataPoints?.length > 0)
+        };
+    });
 
     return {
         companyName,
