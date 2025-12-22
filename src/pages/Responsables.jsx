@@ -128,7 +128,7 @@ const ResponsablesPage = () => {
                 const isUserAdmin = u.role === 'admin';
 
                 // User request: "Admin no deberia aparecer en ninguna" implies hiding generic admins from this view
-                if (belongsToCompany && !isUserAdmin) {
+                if (belongsToCompany && !isUserAdmin && u.name) {
                     names.add(u.name);
                 }
             });
@@ -163,7 +163,7 @@ const ResponsablesPage = () => {
                             myA3Actions.push({
                                 ...action,
                                 projectId: project.id,
-                                projectTitle: project.title
+                                ...project.title ? { projectTitle: project.title } : {}
                             });
                         }
                     });
@@ -230,7 +230,7 @@ const ResponsablesPage = () => {
     // Data for Chart
     // Data for Chart
     const chartData = responsibleStats.slice(0, 20).map(r => ({
-        name: r.name.split(' ')[0], // First name only for chart
+        name: r.name ? r.name.split(' ')[0] : 'S/N', // First name only for chart, safe check
         pendientes: r.totalPending,
         completadas: r.totalCompleted
     }));
