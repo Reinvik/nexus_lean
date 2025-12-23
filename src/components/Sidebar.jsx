@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, ClipboardList, FileText, Activity, Zap, ShieldCheck, Settings, Users, LogOut, Camera, X } from 'lucide-react';
+import { LayoutDashboard, ClipboardList, FileText, Activity, Zap, ShieldCheck, Settings, Users, LogOut, Camera, X, Brain } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../supabaseClient';
 import ImageUpload from './ImageUpload';
@@ -50,6 +50,7 @@ const Sidebar = ({ isOpen, onClose }) => {
 
     const navItems = [
         { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
+        { icon: Brain, label: 'Consultor IA', path: '/consultant' },
         { icon: ClipboardList, label: 'Tarjetas 5S', path: '/5s' },
         { icon: ShieldCheck, label: 'Auditoría 5S', path: '/auditorias-5s' },
         { icon: FileText, label: 'Proyectos A3', path: '/a3' },

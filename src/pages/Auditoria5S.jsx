@@ -2,8 +2,9 @@ import HeaderWithFilter from '../components/HeaderWithFilter';
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../context/AuthContext';
-import { Plus, Trash2, Edit, ChevronDown, ChevronUp, Save, X, Calendar, User, Building, ClipboardCheck, BarChart2, Type } from 'lucide-react';
+import { Plus, Trash2, Edit, ChevronDown, ChevronUp, Save, X, Calendar, User, Building, ClipboardCheck, BarChart2, Type, Wifi, UploadCloud } from 'lucide-react';
 import MobileFab from '../components/mobile/MobileFab';
+import { offlineService } from '../services/offlineService';
 import {
     Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -43,6 +44,8 @@ const Auditoria5S = () => {
     const [view, setView] = useState('dashboard'); // 'dashboard', 'form'
     const [audits, setAudits] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [offlineAudits, setOfflineAudits] = useState([]);
+    const [isSyncing, setIsSyncing] = useState(false);
 
     // Fixed Configuration (removed user controls per request)
     const chartConfig = {
@@ -73,6 +76,11 @@ const Auditoria5S = () => {
     const fetchAudits = async () => {
         setLoading(true);
         try {
+            // Fetch Offline Audits
+            const localAudits = await offlineService.getAllAudits();
+            setOfflineAudits(localAudits);
+
+            // Fetch Online Audits
             let query = supabase
                 .from('audit_5s')
                 .select(`
@@ -89,13 +97,86 @@ const Auditoria5S = () => {
             }
 
             const { data, error } = await query;
-
             if (error) throw error;
+
             setAudits(data || []);
         } catch (error) {
             console.error('Error fetching audits:', error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleSyncAudits = async () => {
+        setIsSyncing(true);
+        try {
+            const localAudits = await offlineService.getAllAudits();
+            if (localAudits.length === 0) return;
+
+            let successCount = 0;
+            for (const audit of localAudits) {
+                try {
+                    const payload = { ...audit.data };
+                    // Remove entries from payload for the main insert
+                    const entries = payload.entries; // object with S1..S5 arrays
+                    delete payload.entries;
+
+                    // Ensure company_id
+                    const targetCompanyId = user.role === 'admin' && globalFilterCompanyId !== 'all' ? globalFilterCompanyId : (user.company_id || user.companyId);
+                    payload.company_id = targetCompanyId || user.companyId;
+
+                    if (!payload.company_id) {
+                        console.error("Missing company_id for sync", audit);
+                        continue;
+                    }
+
+                    // Insert Audit
+                    const { data: insertedAudit, error: auditError } = await supabase
+                        .from('audit_5s')
+                        .insert([payload])
+                        .select()
+                        .single();
+
+                    if (auditError) throw auditError;
+
+                    // Insert Entries
+                    const entriesToInsert = [];
+                    Object.keys(entries).forEach(section => {
+                        entries[section].forEach(entry => {
+                            entriesToInsert.push({
+                                audit_id: insertedAudit.id,
+                                section,
+                                question: entry.question,
+                                score: entry.score,
+                                comment: entry.comment
+                            });
+                        });
+                    });
+
+                    if (entriesToInsert.length > 0) {
+                        const { error: entriesError } = await supabase
+                            .from('audit_5s_entries')
+                            .insert(entriesToInsert);
+                        if (entriesError) throw entriesError;
+                    }
+
+                    // Delete from Offline DB
+                    await offlineService.deleteAudit(audit.tempId);
+                    successCount++;
+
+                } catch (err) {
+                    console.error("Error syncing specific audit:", err);
+                }
+            }
+
+            alert(`Sincronización completada: ${successCount} auditorías subidas.`);
+            fetchAudits();
+
+        } catch (error) {
+            console.error("Sync error:", error);
+            alert("Error general en sincronización");
+        } finally {
+            setIsSyncing(false);
         }
     };
 
@@ -442,6 +523,16 @@ const Auditoria5S = () => {
                         <X size={20} /> Cancelar
                     </button>
                 )}
+                {offlineAudits.length > 0 && view === 'dashboard' && (
+                    <button
+                        onClick={handleSyncAudits}
+                        disabled={isSyncing}
+                        className="bg-amber-100 hover:bg-amber-200 text-amber-800 px-4 py-2 rounded-lg flex items-center gap-2 transition-colors font-medium border border-amber-200 animate-pulse"
+                    >
+                        <UploadCloud size={20} />
+                        {isSyncing ? 'Sincronizando...' : `Sincronizar (${offlineAudits.length})`}
+                    </button>
+                )}
             </HeaderWithFilter>
 
             {view === 'dashboard' ? (
@@ -456,7 +547,7 @@ const Auditoria5S = () => {
                                     <span className="text-xs text-slate-500">{filteredAudits[0]?.title || filteredAudits[0]?.audit_date}</span>
                                 </div>
                                 <div className="h-64 w-full">
-                                    <ResponsiveContainer width="100%" height="100%">
+                                    <ResponsiveContainer width="100%" height="100%" minWidth={100} minHeight={100}>
                                         <RadarChart cx="50%" cy="50%" outerRadius="80%" data={getRadarData(filteredAudits[0])}>
                                             <PolarGrid stroke="#e2e8f0" />
                                             <PolarAngleAxis dataKey="subject" tick={{ fill: '#475569', fontSize: 12, fontWeight: 500 }} />
@@ -477,7 +568,7 @@ const Auditoria5S = () => {
                                     </div>
                                 </div>
                                 <div className="h-64 w-full">
-                                    <ResponsiveContainer width="100%" height="100%">
+                                    <ResponsiveContainer width="100%" height="100%" minWidth={100} minHeight={100}>
                                         <LineChart data={getTrendData()}>
                                             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                                             <XAxis dataKey="date" stroke="#64748b" fontSize={12} tickMargin={10} />
@@ -494,7 +585,7 @@ const Auditoria5S = () => {
                             <div className="bg-white p-4 rounded-xl shadow-lg border border-slate-200">
                                 <h3 className="text-lg font-semibold mb-4 text-purple-700">Puntaje Promedio por Área</h3>
                                 <div className="h-64 w-full">
-                                    <ResponsiveContainer width="100%" height="100%">
+                                    <ResponsiveContainer width="100%" height="100%" minWidth={100} minHeight={100}>
                                         <BarChart data={getAreaScores()}>
                                             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                                             <XAxis dataKey="name" stroke="#64748b" fontSize={12} />
@@ -510,7 +601,7 @@ const Auditoria5S = () => {
                             <div className="bg-white p-4 rounded-xl shadow-lg border border-slate-200">
                                 <h3 className="text-lg font-semibold mb-4 text-orange-700">Desempeño Global por S</h3>
                                 <div className="h-64 w-full">
-                                    <ResponsiveContainer width="100%" height="100%">
+                                    <ResponsiveContainer width="100%" height="100%" minWidth={100} minHeight={100}>
                                         <BarChart data={getComplianceByS()} layout="vertical">
                                             <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
                                             <XAxis type="number" domain={[0, 5]} tickCount={6} stroke="#64748b" fontSize={12} />

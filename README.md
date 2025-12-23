@@ -68,7 +68,17 @@ La plataforma centraliza todas las herramientas necesarias para gestionar proyec
 - **Progressive Web App**: instalable en celulares y tablets
 - **Diseño mobile-first** optimizado para trabajo en planta
 - **Captura de fotos directa** desde la cámara del dispositivo
-- **Funcionamiento offline** (próximamente)
+- **Funcionamiento offline** para tarjetas 5S y auditorías
+
+### ⚡ Rendimiento Optimizado
+- **Precarga inteligente de datos**: Las tarjetas 5S y datos de responsables se cargan en segundo plano al iniciar sesión
+- **Navegación instantánea**: Sin tiempos de espera al cambiar entre módulos
+- **DataContext global**: Gestión centralizada del estado de la aplicación
+
+### 🤖 Consultor IA Integrado
+- **Análisis inteligente** de proyectos A3 con Gemini AI
+- **Sugerencias automáticas** basadas en datos de la empresa
+- **Chat interactivo** para consultas sobre mejora continua
 
 ---
 
@@ -369,6 +379,13 @@ Para consultas, demostraciones o implementación personalizada:
 
 ---
 
+## 👨‍💻 Autor
+
+**Ariel Mella González**  
+📧 ariel.mellag@gmail.com
+
+---
+
 ## 📄 Licencia
 
 Este proyecto es propietario. Todos los derechos reservados © 2025.
@@ -378,7 +395,7 @@ Para uso comercial o personalización, contactar al desarrollador.
 ---
 
 <p align="center">
-  <strong>Desarrollado con ❤️ para impulsar la Mejora Continua en Latinoamérica</strong>
+  <strong>Desarrollado con ❤️ por Ariel Mella González para impulsar la Mejora Continua en Latinoamérica</strong>
 </p>
 
 <p align="center">

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
     Brain,
     RefreshCw,
@@ -15,16 +15,26 @@ import {
     CheckCircle,
     AlertCircle,
     Info,
-    Zap
+    Zap,
+    MessageSquare,
+    Send,
+    User
 } from 'lucide-react';
-import { prepareCompanyData, generateAIInsight, shouldGenerateNewInsight } from '../services/geminiService';
+import { prepareCompanyData, generateAIInsight, sendChatMessage, shouldGenerateNewInsight } from '../services/geminiService';
 
-const AIConsultant = ({ data, companyName, apiKey }) => {
+const AIConsultant = ({ data, companyName, apiKey, fullScreen = false }) => {
     const [insight, setInsight] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [expanded, setExpanded] = useState(true);
     const [showCoaching, setShowCoaching] = useState(false);
+
+    // Chat State
+    const [activeTab, setActiveTab] = useState('analysis'); // 'analysis' | 'chat'
+    const [chatHistory, setChatHistory] = useState([]);
+    const [inputMessage, setInputMessage] = useState('');
+    const [chatLoading, setChatLoading] = useState(false);
+    const chatEndRef = useRef(null);
 
     // Load cached insight on mount
     useEffect(() => {
@@ -44,6 +54,13 @@ const AIConsultant = ({ data, companyName, apiKey }) => {
         }
     }, [companyName]);
 
+    // Auto-scroll chat
+    useEffect(() => {
+        if (activeTab === 'chat' && chatEndRef.current) {
+            chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+        }
+    }, [chatHistory, activeTab]);
+
     const generateInsight = async () => {
         if (!apiKey) {
             setError('Configura VITE_GEMINI_API_KEY en las variables de entorno');
@@ -59,11 +76,43 @@ const AIConsultant = ({ data, companyName, apiKey }) => {
 
             setInsight(newInsight);
             localStorage.setItem(`ai_insight_${companyName || 'default'}`, JSON.stringify(newInsight));
+
+            // Generate initial chat greeting if empty
+            if (chatHistory.length === 0) {
+                setChatHistory([{
+                    role: 'model',
+                    content: `Hola, he analizado los datos de ${companyName || 'la empresa'}. Veo ${newInsight?.a3?.details?.length || 0} proyectos A3 activos y ${newInsight?.fiveS?.pending || 0} tarjetas 5S pendientes. ¿En qué puedo profundizar?`
+                }]);
+            }
         } catch (err) {
             console.error('Error generating insight:', err);
             setError(err.message || 'Error al generar análisis');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleSendMessage = async (e) => {
+        e.preventDefault();
+        if (!inputMessage.trim() || chatLoading) return;
+
+        const newUserMsg = { role: 'user', content: inputMessage };
+        const newHistory = [...chatHistory, newUserMsg];
+
+        setChatHistory(newHistory);
+        setInputMessage('');
+        setChatLoading(true);
+
+        try {
+            const preparedData = prepareCompanyData(data, companyName);
+            const response = await sendChatMessage(newHistory, inputMessage, preparedData, companyName, apiKey);
+
+            setChatHistory(prev => [...prev, { role: 'model', content: response }]);
+        } catch (err) {
+            console.error(err);
+            setChatHistory(prev => [...prev, { role: 'model', content: "Lo siento, hubo un error al procesar tu mensaje." }]);
+        } finally {
+            setChatLoading(false);
         }
     };
 
@@ -136,13 +185,15 @@ const AIConsultant = ({ data, companyName, apiKey }) => {
     }
 
     return (
-        <div className="bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 overflow-hidden">
+        <div className={`bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 overflow-hidden flex flex-col ${fullScreen ? 'h-full' : 'max-h-[800px]'}`}>
             {/* Header */}
             <div
-                className="bg-gradient-to-r from-slate-800 via-slate-800 to-cyan-900 p-5 cursor-pointer"
-                onClick={() => setExpanded(!expanded)}
+                className="bg-gradient-to-r from-slate-800 via-slate-800 to-cyan-900 p-0 flex flex-col shrink-0"
             >
-                <div className="flex items-center justify-between">
+                <div
+                    className={`p-5 flex items-center justify-between ${!fullScreen ? 'cursor-pointer' : ''}`}
+                    onClick={() => !fullScreen && setExpanded(!expanded)}
+                >
                     <div className="flex items-center gap-3">
                         <div className="p-2.5 bg-gradient-to-br from-cyan-400 to-cyan-600 rounded-xl shadow-lg shadow-cyan-500/30">
                             <Brain size={22} className="text-white" />
@@ -158,7 +209,7 @@ const AIConsultant = ({ data, companyName, apiKey }) => {
                     <div className="flex items-center gap-3">
                         {insight?.generatedAt && (
                             <span className="text-[10px] text-slate-500 hidden sm:block">
-                                Generado: {formatDate(insight.generatedAt)}
+                                {formatDate(insight.generatedAt)}
                             </span>
                         )}
                         <button
@@ -170,28 +221,43 @@ const AIConsultant = ({ data, companyName, apiKey }) => {
                             <RefreshCw size={16} className={`text-white ${loading ? 'animate-spin' : ''}`} />
                         </button>
                         <button className="p-1 text-slate-400">
-                            {expanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                            {!fullScreen && (expanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />)}
                         </button>
                     </div>
                 </div>
 
-                {/* Status Badge */}
-                {insight?.evaluacionProgreso && (
-                    <div className="mt-4 flex items-center gap-2">
-                        <div className={`w-2 h-2 rounded-full ${getStatusColor(insight.evaluacionProgreso.estado)}`}></div>
-                        <span className="text-xs font-medium text-slate-300 uppercase tracking-wider">
-                            Estado: {insight.evaluacionProgreso.estado}
-                        </span>
+                {/* Tabs */}
+                {expanded && (
+                    <div className="flex bg-slate-900/50 backdrop-blur-sm px-2 pt-2 gap-1 border-t border-white/5">
+                        <button
+                            onClick={() => setActiveTab('analysis')}
+                            className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold uppercase tracking-wider rounded-t-lg transition-colors ${activeTab === 'analysis'
+                                ? 'bg-white text-slate-800'
+                                : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
+                                }`}
+                        >
+                            <Target size={14} /> Análisis
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('chat')}
+                            className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold uppercase tracking-wider rounded-t-lg transition-colors ${activeTab === 'chat'
+                                ? 'bg-white text-slate-800'
+                                : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
+                                }`}
+                        >
+                            <MessageSquare size={14} /> Chat Asistente
+                        </button>
                     </div>
                 )}
             </div>
 
             {/* Body */}
             {expanded && (
-                <div className="p-5 space-y-5 animate-in fade-in slide-in-from-top-2 duration-300">
-                    {/* Loading State */}
+                <div className="flex-1 overflow-hidden flex flex-col bg-slate-50 relative min-h-[400px]">
+
+                    {/* LOADING OVERLAY */}
                     {loading && (
-                        <div className="flex flex-col items-center justify-center py-12">
+                        <div className="absolute inset-0 z-20 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center">
                             <div className="relative">
                                 <Brain size={48} className="text-slate-200 animate-pulse" />
                                 <div className="absolute inset-0 flex items-center justify-center">
@@ -199,31 +265,29 @@ const AIConsultant = ({ data, companyName, apiKey }) => {
                                 </div>
                             </div>
                             <p className="mt-4 text-sm text-slate-500 font-medium">Analizando datos...</p>
-                            <p className="text-xs text-slate-400">Esto puede tomar unos segundos</p>
                         </div>
                     )}
 
-                    {/* Error State */}
+                    {/* ERROR STATE */}
                     {error && !loading && (
-                        <div className="bg-red-50 border border-red-100 rounded-xl p-4 flex items-start gap-3">
-                            <AlertCircle size={20} className="text-red-500 shrink-0 mt-0.5" />
-                            <div>
-                                <p className="text-sm font-medium text-red-800">Error al generar análisis</p>
-                                <p className="text-xs text-red-600 mt-1">{error}</p>
-                                <button
-                                    onClick={generateInsight}
-                                    className="mt-2 text-xs font-bold text-red-600 hover:text-red-800"
-                                >
-                                    Reintentar →
-                                </button>
+                        <div className="p-6">
+                            <div className="bg-red-50 border border-red-100 rounded-xl p-4 flex items-start gap-3">
+                                <AlertCircle size={20} className="text-red-500 shrink-0 mt-0.5" />
+                                <div>
+                                    <p className="text-sm font-medium text-red-800">Error al generar análisis</p>
+                                    <p className="text-xs text-red-600 mt-1">{error}</p>
+                                    <button onClick={generateInsight} className="mt-2 text-xs font-bold text-red-600 hover:text-red-800">
+                                        Reintentar →
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     )}
 
-                    {/* No Insight Yet */}
+                    {/* NO INSIGHT */}
                     {!insight && !loading && !error && (
-                        <div className="text-center py-8">
-                            <Brain size={48} className="text-slate-200 mx-auto mb-4" />
+                        <div className="flex-1 flex flex-col items-center justify-center p-8">
+                            <Brain size={48} className="text-slate-200 mb-4" />
                             <p className="text-slate-500 mb-4">No hay análisis generado aún</p>
                             <button
                                 onClick={generateInsight}
@@ -234,12 +298,13 @@ const AIConsultant = ({ data, companyName, apiKey }) => {
                         </div>
                     )}
 
-                    {/* Insight Content */}
-                    {insight && !loading && (
-                        <>
+                    {/* CONTENT - ANALYSIS TAB */}
+                    {insight && !loading && !error && activeTab === 'analysis' && (
+                        <div className="flex-1 overflow-y-auto p-5 space-y-5 animate-in fade-in slide-in-from-left-4 duration-300">
+
                             {/* Executive Summary */}
-                            <div className="bg-gradient-to-br from-slate-50 to-slate-100/50 rounded-xl p-4 border border-slate-200">
-                                <p className="text-slate-700 text-sm leading-relaxed">
+                            <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
+                                <p className="text-slate-700 text-sm leading-relaxed italic">
                                     "{insight.resumenEjecutivo}"
                                 </p>
                             </div>
@@ -265,14 +330,20 @@ const AIConsultant = ({ data, companyName, apiKey }) => {
                                     <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
                                         <Target size={14} /> Evaluación de Progreso
                                     </h4>
-                                    <ul className="space-y-2">
-                                        {insight.evaluacionProgreso.observaciones.map((obs, i) => (
-                                            <li key={i} className="flex items-start gap-2 text-sm text-slate-600">
-                                                <CheckCircle size={14} className="text-slate-400 shrink-0 mt-0.5" />
-                                                {obs}
-                                            </li>
-                                        ))}
-                                    </ul>
+                                    <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
+                                        <div className="flex items-center gap-2 mb-3">
+                                            <div className={`w-2.5 h-2.5 rounded-full ${getStatusColor(insight.evaluacionProgreso.estado)}`}></div>
+                                            <span className="text-xs font-bold uppercase text-slate-600">Estado: {insight.evaluacionProgreso.estado}</span>
+                                        </div>
+                                        <ul className="space-y-2">
+                                            {insight.evaluacionProgreso.observaciones.map((obs, i) => (
+                                                <li key={i} className="flex items-start gap-2 text-sm text-slate-600">
+                                                    <CheckCircle size={14} className="text-slate-400 shrink-0 mt-0.5" />
+                                                    {obs}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
                                 </div>
                             )}
 
@@ -298,9 +369,9 @@ const AIConsultant = ({ data, companyName, apiKey }) => {
                                 </div>
                             )}
 
-                            {/* Coaching Section - Collapsible */}
+                            {/* Coaching Section */}
                             {insight.coachingPracticas?.length > 0 && (
-                                <div className="border border-cyan-100 rounded-xl overflow-hidden">
+                                <div className="border border-cyan-100 rounded-xl overflow-hidden bg-white shadow-sm">
                                     <button
                                         onClick={() => setShowCoaching(!showCoaching)}
                                         className="w-full flex items-center justify-between p-4 bg-gradient-to-r from-cyan-50 to-white hover:from-cyan-100 transition-colors"
@@ -313,7 +384,7 @@ const AIConsultant = ({ data, companyName, apiKey }) => {
                                     </button>
 
                                     {showCoaching && (
-                                        <div className="p-4 space-y-4 bg-white animate-in fade-in duration-200">
+                                        <div className="p-4 space-y-4 animate-in fade-in duration-200">
                                             {insight.coachingPracticas.map((tip, i) => (
                                                 <div key={i} className="flex items-start gap-3">
                                                     <div className="p-1.5 bg-cyan-100 rounded-lg shrink-0">
@@ -330,37 +401,9 @@ const AIConsultant = ({ data, companyName, apiKey }) => {
                                 </div>
                             )}
 
-                            {/* Recommended Actions */}
-                            {insight.accionesRecomendadas?.length > 0 && (
-                                <div>
-                                    <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
-                                        <Zap size={14} /> Acciones Recomendadas
-                                    </h4>
-                                    <div className="space-y-2">
-                                        {insight.accionesRecomendadas.map((accion, i) => (
-                                            <div key={i} className="flex items-start gap-3 p-3 bg-slate-50 rounded-lg border border-slate-100 hover:bg-slate-100 transition-colors">
-                                                <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black text-white shrink-0 ${accion.impacto === 'alto' ? 'bg-emerald-500' :
-                                                        accion.impacto === 'medio' ? 'bg-amber-500' : 'bg-slate-400'
-                                                    }`}>
-                                                    {accion.prioridad}
-                                                </span>
-                                                <div className="flex-1">
-                                                    <p className="text-sm text-slate-700">{accion.accion}</p>
-                                                    {accion.responsableSugerido && (
-                                                        <p className="text-xs text-slate-500 mt-1">
-                                                            Sugerido: <span className="font-medium">{accion.responsableSugerido}</span>
-                                                        </p>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
                             {/* Focus of the Day */}
                             {insight.enfoqueDelDia && (
-                                <div className="bg-gradient-to-r from-cyan-500 to-cyan-600 rounded-xl p-4 text-white">
+                                <div className="bg-gradient-to-r from-cyan-500 to-cyan-600 rounded-xl p-4 text-white shadow-lg shadow-cyan-500/20">
                                     <div className="flex items-center gap-2 mb-2">
                                         <Target size={16} />
                                         <span className="text-xs font-bold uppercase tracking-wider opacity-80">Enfoque del Día</span>
@@ -368,8 +411,76 @@ const AIConsultant = ({ data, companyName, apiKey }) => {
                                     <p className="text-sm font-medium leading-relaxed">{insight.enfoqueDelDia}</p>
                                 </div>
                             )}
-                        </>
+                        </div>
                     )}
+
+                    {/* CONTENT - CHAT TAB */}
+                    {insight && !loading && !error && activeTab === 'chat' && (
+                        <div className="flex-1 flex flex-col h-full animate-in fade-in slide-in-from-right-4 duration-300">
+
+                            {/* Chat History */}
+                            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50">
+                                {chatHistory.length === 0 && (
+                                    <div className="text-center py-12 px-6">
+                                        <div className="bg-cyan-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-cyan-600">
+                                            <MessageSquare size={32} />
+                                        </div>
+                                        <h4 className="text-slate-800 font-bold mb-2">Asistente de Mejora Continua</h4>
+                                        <p className="text-slate-500 text-sm">Pregúntame sobre tus Ishikawas, 5 Porqués o cómo mejorar tus KPIs.</p>
+                                    </div>
+                                )}
+
+                                {chatHistory.map((msg, idx) => (
+                                    <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                        <div className={`max-w-[85%] rounded-2xl p-3 text-sm leading-relaxed shadow-sm ${msg.role === 'user'
+                                            ? 'bg-cyan-600 text-white rounded-br-none'
+                                            : 'bg-white text-slate-700 border border-slate-200 rounded-bl-none'
+                                            }`}>
+                                            {/* Simple Markdown rendering could be added here if needed */}
+                                            {msg.content.split('\n').map((line, i) => (
+                                                <p key={i} className="mb-1 last:mb-0">{line}</p>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ))}
+
+                                {chatLoading && (
+                                    <div className="flex justify-start">
+                                        <div className="bg-white border border-slate-200 rounded-2xl rounded-bl-none p-4 shadow-sm">
+                                            <div className="flex gap-1.5">
+                                                <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"></div>
+                                                <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                                                <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                                <div ref={chatEndRef}></div>
+                            </div>
+
+                            {/* Chat Input */}
+                            <div className="p-3 bg-white border-t border-slate-200">
+                                <form onSubmit={handleSendMessage} className="relative flex items-center gap-2">
+                                    <input
+                                        type="text"
+                                        className="w-full pl-4 pr-12 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none text-sm text-slate-800 placeholder-slate-400 transition-all"
+                                        placeholder="Escribe tu pregunta sobre los datos..."
+                                        value={inputMessage}
+                                        onChange={(e) => setInputMessage(e.target.value)}
+                                        disabled={chatLoading}
+                                    />
+                                    <button
+                                        type="submit"
+                                        disabled={!inputMessage.trim() || chatLoading}
+                                        className="absolute right-2 p-2 bg-gradient-to-r from-cyan-500 to-cyan-600 text-white rounded-lg hover:shadow-md disabled:opacity-50 disabled:shadow-none transition-all active:scale-95"
+                                    >
+                                        <Send size={18} />
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    )}
+
                 </div>
             )}
         </div>

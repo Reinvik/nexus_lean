@@ -5,7 +5,7 @@ import HeaderWithFilter from '../components/HeaderWithFilter';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
 import { Activity, CheckCircle, TrendingUp, Zap, ClipboardList, Target, Clock, Maximize2, Minimize2 } from 'lucide-react';
 import StatCard from '../components/StatCard';
-import AIConsultant from '../components/AIConsultant';
+
 
 const Dashboard = () => {
     const { user, globalFilterCompanyId, companies } = useAuth();
@@ -186,24 +186,47 @@ const Dashboard = () => {
     const activeCharts = useMemo(() => {
         const charts = [];
         filteredData.a3.forEach(project => {
-            // Only show charts for active projects or important ones? defaults to all for now or active
-            // if (project.status === 'Cerrado') return; 
-
             if (project.followUpData && Array.isArray(project.followUpData)) {
                 project.followUpData.forEach(chart => {
-                    // Check if chart has data AND is enabled for dashboard
-                    // Backward compatibility: If showInDashboard is undefined, decide default (true or false).
-                    // User asked for "check if we want to show", implying opt-in. But existing users might lose charts.
-                    // Let's assume default TRUE for now to show the one they just created, 
-                    // OR specifically check valid condition. 
-                    // Given the user said "add a check if we want it to show", it's safer to default to FALSE for "new feature" logic 
-                    // BUT they just made a chart and it didn't show.
-                    // Let's default to TRUE if undefined to be safe for existing data, 
-                    // and strictly respect FALSE if explicitly set.
                     const isVisible = chart.showInDashboard !== false;
 
                     if (isVisible && chart.dataPoints && chart.dataPoints.length > 0) {
-                        const sortedData = [...chart.dataPoints].sort((a, b) => new Date(a.date) - new Date(b.date));
+                        let processedData = [];
+
+                        // LOGIC FOR OEE CHARTS
+                        if (chart.kpiType === 'oee') {
+                            const oeeConfig = chart.oeeConfig || { standardSpeed: 100 };
+
+                            processedData = chart.dataPoints.map(point => {
+                                const availableTime = parseFloat(point.availableTime) || 0;
+                                const productiveTime = parseFloat(point.productiveTime) || 0;
+                                const producedPieces = parseFloat(point.producedPieces) || 0;
+                                const defectPieces = parseFloat(point.defectPieces) || 0;
+                                const standardSpeed = parseFloat(oeeConfig.standardSpeed) || 100;
+
+                                // Avoid division by zero
+                                const availability = availableTime > 0 ? (productiveTime / availableTime) * 100 : 0;
+                                const theoreticalOutput = productiveTime * standardSpeed;
+                                const performance = theoreticalOutput > 0 ? (producedPieces / theoreticalOutput) * 100 : 0;
+                                const quality = producedPieces > 0 ? ((producedPieces - defectPieces) / producedPieces) * 100 : 0;
+                                const oee = (availability * performance * quality) / 10000;
+
+                                return {
+                                    date: point.date,
+                                    value: Math.round(oee * 10) / 10 // OEE Percentage
+                                };
+                            });
+                        }
+                        // LOGIC FOR STANDARD KPIs
+                        else {
+                            processedData = chart.dataPoints.map(p => ({
+                                date: p.date,
+                                value: p.value !== null && p.value !== undefined ? parseFloat(p.value) : 0
+                            }));
+                        }
+
+                        const sortedData = processedData.sort((a, b) => new Date(a.date) - new Date(b.date));
+
                         charts.push({
                             uniqueId: `${project.id}-${chart.id}`,
                             projectId: project.id,
@@ -211,7 +234,7 @@ const Dashboard = () => {
                             responsible: project.responsible,
                             kpiName: chart.kpiName || 'KPI Sin Nombre',
                             goal: chart.kpiGoal,
-                            isPercentage: chart.isPercentage,
+                            isPercentage: chart.kpiType === 'oee' ? true : chart.isPercentage, // OEE is always %
                             data: sortedData,
                             lastValue: sortedData[sortedData.length - 1]?.value
                         });
@@ -471,6 +494,7 @@ const Dashboard = () => {
                                                             <stop offset="95%" stopColor={theme.stop1} stopOpacity={0} />
                                                         </linearGradient>
                                                     </defs>
+                                                    <XAxis dataKey="date" hide />
                                                     <Tooltip
                                                         contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 10px rgba(0,0,0,0.1)', fontSize: '12px' }}
                                                         formatter={(value) => [chart.isPercentage ? `${value}%` : value, 'Valor']}
@@ -639,44 +663,7 @@ const Dashboard = () => {
                 </div>
             </div>
 
-            {/* AI Consultant Section - Admin Only (for now) */}
-            {(user?.role === 'admin' || user?.email === 'ariel.mellag@gmail.com') && (
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <div className="lg:col-span-2">
-                        <AIConsultant
-                            data={{
-                                fiveS: filteredData.fiveS,
-                                quickWins: filteredData.quickWins,
-                                vsms: filteredData.vsms,
-                                a3: filteredData.a3
-                            }}
-                            companyName={companies?.find(c => c.id === globalFilterCompanyId)?.name || 'Todas las Empresas'}
-                            apiKey={import.meta.env.VITE_GEMINI_API_KEY}
-                        />
-                    </div>
-                    <div className="bg-white p-6 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 h-fit">
-                        <h4 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-4">Resumen Rápido</h4>
-                        <div className="space-y-4">
-                            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                                <span className="text-sm text-slate-600">Tasa Cierre 5S</span>
-                                <span className="font-bold text-emerald-600">{metrics.fiveS.rate}%</span>
-                            </div>
-                            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                                <span className="text-sm text-slate-600">Quick Wins Activas</span>
-                                <span className="font-bold text-amber-600">{metrics.quickWins.total - metrics.quickWins.done}</span>
-                            </div>
-                            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                                <span className="text-sm text-slate-600">Proyectos A3 Activos</span>
-                                <span className="font-bold text-indigo-600">{metrics.a3.total - metrics.a3.closed}</span>
-                            </div>
-                            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                                <span className="text-sm text-slate-600">Avance Plan Acción</span>
-                                <span className="font-bold text-purple-600">{metrics.a3.rate}%</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
+
         </div>
     );
 };

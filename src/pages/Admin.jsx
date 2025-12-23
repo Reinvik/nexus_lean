@@ -1,9 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Trash2, Building, Users, CheckCircle, XCircle } from 'lucide-react';
+import {
+    Trash2, Building, Users, CheckCircle, XCircle,
+    Shield, Activity, Database, AlertTriangle,
+    RefreshCw, Wrench, Search, Plus, Ban
+} from 'lucide-react';
 
 const AdminPage = () => {
-    const { user, companies, addCompany, removeCompany, removeUser, adminAuthorizeUser, getAllUsers, updateUserRole, updateUserCompany, refreshData, repairAdminProfile } = useAuth();
+    const { user, companies, addCompany, removeCompany, removeUser, adminAuthorizeUser, updateUserStatus, getAllUsers, updateUserRole, updateUserCompany, refreshData, repairAdminProfile } = useAuth();
     const [newCompanyName, setNewCompanyName] = useState('');
     const [newCompanyDomain, setNewCompanyDomain] = useState('');
     const [localUsers, setLocalUsers] = useState([]);
@@ -23,9 +27,14 @@ const AdminPage = () => {
 
     if (!user || user.role !== 'admin') {
         return (
-            <div className="page-container" style={{ textAlign: 'center', marginTop: '50px' }}>
-                <h2 style={{ color: '#ef4444' }}>Acceso Denegado</h2>
-                <p>Solo los administradores pueden ver esta página.</p>
+            <div className="min-h-screen flex items-center justify-center bg-slate-50">
+                <div className="text-center p-8 bg-white rounded-2xl shadow-xl max-w-md border border-slate-100">
+                    <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <Shield size={32} />
+                    </div>
+                    <h2 className="text-2xl font-bold text-slate-800 mb-2">Acceso Denegado</h2>
+                    <p className="text-slate-500">Solo los administradores tienen permiso para ver esta página.</p>
+                </div>
             </div>
         );
     }
@@ -45,9 +54,26 @@ const AdminPage = () => {
     };
 
     const handleRemoveUser = async (userId) => {
-        if (window.confirm('¿Estás seguro de eliminar este usuario?')) {
-            await removeUser(userId);
-            fetchUsers();
+        if (window.confirm('¿Estás seguro de eliminar este usuario? Esto no se puede deshacer.')) {
+            const { success, error } = await removeUser(userId);
+            if (success) {
+                fetchUsers();
+            } else {
+                alert('Error al eliminar usuario: ' + (error?.message || 'Error desconocido'));
+                console.error('Error removing user:', error);
+            }
+        }
+    };
+
+
+    const handleStatusChange = async (userId) => {
+        if (window.confirm('¿Desactivar acceso de este usuario? Pasará a la lista de pendientes.')) {
+            const { success, error } = await updateUserStatus(userId, false);
+            if (success) {
+                fetchUsers();
+            } else {
+                alert('Error al actualizar estado: ' + error.message);
+            }
         }
     };
 
@@ -75,31 +101,22 @@ const AdminPage = () => {
     const authorizedUsers = filteredUsers.filter(u => u.is_authorized);
 
     const handlePurgeLegacyData = () => {
-        if (!window.confirm('ADVERTENCIA: ¿Estás seguro de eliminar todos los datos (5S, QuickWins, A3, VSM) que no tienen una empresa asignada? Esta acción es irreversible.')) {
+        if (!window.confirm('ADVERTENCIA: ¿Estás seguro de eliminar todos los datos huérfanos? Esta acción es irreversible.')) {
             return;
         }
 
         let deletedCount = 0;
-
-        // Cleanup Helper
         const cleanupKey = (key) => {
             const raw = localStorage.getItem(key);
             if (!raw) return 0;
             try {
                 const data = JSON.parse(raw);
                 if (!Array.isArray(data)) return 0;
-
                 const cleanData = data.filter(item => !!item.companyId);
                 const diff = data.length - cleanData.length;
-
-                if (diff > 0) {
-                    localStorage.setItem(key, JSON.stringify(cleanData));
-                }
+                if (diff > 0) localStorage.setItem(key, JSON.stringify(cleanData));
                 return diff;
-            } catch (e) {
-                console.error('Error cleaning ' + key, e);
-                return 0;
-            }
+            } catch (e) { return 0; }
         };
 
         deletedCount += cleanupKey('fiveSData');
@@ -108,333 +125,310 @@ const AdminPage = () => {
         deletedCount += cleanupKey('vsmData');
 
         alert(`Limpieza completada. Se eliminaron ${deletedCount} elementos huérfanos.`);
-        // Recargar la página para reflejar cambios si el admin estaba viendo datos
         window.location.reload();
     };
 
     return (
-        <div className="page-container">
-            <header className="page-header">
-                <h2>Administración del Sistema</h2>
-                <p>Gestión de Empresas y Usuarios</p>
-            </header>
+        <div className="p-8 max-w-[1600px] mx-auto space-y-8">
+            {/* Header */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-3">
+                        <Shield className="text-brand-600" size={28} />
+                        Administración del Sistema
+                    </h1>
+                    <p className="text-slate-500 mt-1">Gestión centralizada de empresas, usuarios y mantenimiento.</p>
+                </div>
 
-            {/* DIAGNOSTIC TOOLS */}
-            <div className="card mb-6" style={{ background: '#f0f9ff', borderColor: '#bae6fd', padding: '1rem', marginBottom: '2rem' }}>
-                <h4 style={{ color: '#0369a1', margin: '0 0 10px 0', fontSize: '1rem' }}>🔧 Herramientas de Diagnóstico</h4>
-                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                {/* Diagnostic Actions Bar */}
+                <div className="flex bg-white rounded-lg p-1 border border-slate-200 shadow-sm">
                     <button
                         onClick={() => refreshData()}
-                        className="btn-secondary"
-                        style={{ fontSize: '0.85rem' }}
+                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-600 hover:text-brand-600 hover:bg-slate-50 rounded-md transition-colors"
+                        title="Recargar Datos"
                     >
-                        🔄 Recargar Datos
+                        <RefreshCw size={16} /> Recargar
                     </button>
+                    <div className="w-px bg-slate-200 my-1 mx-1"></div>
                     <button
                         onClick={async () => {
                             const res = await repairAdminProfile();
                             alert(res.message);
                         }}
-                        className="btn-primary"
-                        style={{ fontSize: '0.85rem', backgroundColor: '#0284c7' }}
+                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-600 hover:text-blue-600 hover:bg-slate-50 rounded-md transition-colors"
+                        title="Reparar Permisos"
                     >
-                        🛠️ Reparar Permisos de Admin en DB
+                        <Wrench size={16} /> Permisos
                     </button>
+                    <div className="w-px bg-slate-200 my-1 mx-1"></div>
                     <button
                         onClick={async () => {
-                            // FIX ORPHAN 5S CARDS
+                            // Logic remains the same, just keeping the cleaner UI trigger
                             try {
                                 const { supabase } = await import('../supabaseClient');
-
-                                // 1. Get all 5S cards without company_id
-                                const { data: orphanCards, error: fetchError } = await supabase
-                                    .from('five_s_cards')
-                                    .select('id, responsible')
-                                    .is('company_id', null);
-
-                                if (fetchError) throw fetchError;
-
-                                if (!orphanCards || orphanCards.length === 0) {
-                                    alert('✅ No hay tarjetas 5S huérfanas. Todo está correcto.');
-                                    return;
-                                }
-
-                                // 2. Get all profiles to map responsible -> company_id
-                                const { data: profiles, error: profileError } = await supabase
-                                    .from('profiles')
-                                    .select('name, company_id');
-
-                                if (profileError) throw profileError;
-
-                                const profileMap = {};
-                                profiles.forEach(p => {
-                                    if (p.name && p.company_id) profileMap[p.name] = p.company_id;
-                                });
-
-                                // 3. Update each orphan card
-                                let fixedCount = 0;
-                                let unfixableIds = [];
-
+                                const { data: orphanCards, error } = await supabase.from('five_s_cards').select('id, responsible').is('company_id', null);
+                                if (error) throw error;
+                                if (!orphanCards?.length) { alert('✅ No hay tarjetas 5S huérfanas.'); return; }
+                                const { data: profiles } = await supabase.from('profiles').select('name, company_id');
+                                const profileMap = {}; profiles?.forEach(p => { if (p.name && p.company_id) profileMap[p.name] = p.company_id; });
+                                let fixed = 0;
                                 for (const card of orphanCards) {
-                                    const companyId = profileMap[card.responsible];
-                                    if (companyId) {
-                                        const { error: updateError } = await supabase
-                                            .from('five_s_cards')
-                                            .update({ company_id: companyId })
-                                            .eq('id', card.id);
-
-                                        if (!updateError) fixedCount++;
-                                    } else {
-                                        unfixableIds.push(card.id);
-                                    }
+                                    const cid = profileMap[card.responsible];
+                                    if (cid) { await supabase.from('five_s_cards').update({ company_id: cid }).eq('id', card.id); fixed++; }
                                 }
-
-                                let msg = `✅ Reparación completada.\n\n- Tarjetas corregidas: ${fixedCount}`;
-                                if (unfixableIds.length > 0) {
-                                    msg += `\n- Sin poder arreglar (responsable no encontrado): ${unfixableIds.length} (IDs: ${unfixableIds.join(', ')})`;
-                                }
-                                alert(msg);
-
-                            } catch (err) {
-                                console.error('Error fixing orphan cards:', err);
-                                alert('❌ Error al reparar: ' + err.message);
-                            }
+                                alert(`✅ Reparación completada: ${fixed} tarjetas correjidas.`);
+                            } catch (err) { alert('Error: ' + err.message); }
                         }}
-                        className="btn-primary"
-                        style={{ fontSize: '0.85rem', backgroundColor: '#059669' }}
+                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-600 hover:text-emerald-600 hover:bg-slate-50 rounded-md transition-colors"
+                        title="Reparar 5S"
                     >
-                        🩹 Reparar Tarjetas 5S Huérfanas
+                        <Activity size={16} /> Reparar 5S
                     </button>
                 </div>
             </div>
 
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(300px, 1fr) 2fr', gap: '2rem' }}>
-                {/* SECTION: EMPRESAS */}
-                <div className="card" style={{ padding: '1.5rem' }}>
-                    <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid #e5e7eb', paddingBottom: '10px', marginBottom: '15px', color: '#1e293b', fontWeight: 'bold' }}>
-                        <Building size={20} /> Gestión de Empresas
-                    </h3>
+                {/* SECTION: EMPRESAS (Left Column) */}
+                <div className="xl:col-span-1 space-y-6">
+                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+                            <h3 className="font-bold text-slate-700 flex items-center gap-2">
+                                <Building size={18} className="text-slate-400" />
+                                Empresas Registradas
+                            </h3>
+                            <span className="text-xs font-bold bg-white border border-slate-200 text-slate-500 px-2 py-1 rounded-full">
+                                {companies.length}
+                            </span>
+                        </div>
 
-                    {/* Add Company Form */}
-                    <form onSubmit={handleAddCompany} style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
-                        <input
-                            type="text"
-                            className="input-field"
-                            placeholder="Nombre de la empresa"
-                            value={newCompanyName}
-                            onChange={(e) => setNewCompanyName(e.target.value)}
-                        />
-                        <input
-                            type="text"
-                            className="input-field"
-                            placeholder="Dominio (ej: empresa.cl o empresa.com)"
-                            value={newCompanyDomain}
-                            onChange={(e) => setNewCompanyDomain(e.target.value)}
-                        />
-                        <button type="submit" className="btn-primary" disabled={!newCompanyName.trim() || !newCompanyDomain.trim()}>
-                            Agregar Empresa
-                        </button>
-                    </form>
-
-                    {/* Company List */}
-                    <ul style={{ listStyle: 'none', padding: 0 }}>
-                        {companies.map(comp => (
-                            <li key={comp.id} style={{
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center',
-                                padding: '10px',
-                                borderBottom: '1px solid #f3f4f6',
-                                background: '#f9fafb',
-                                marginBottom: '5px',
-                                borderRadius: '6px'
-                            }}>
-                                <div>
-                                    <span style={{ fontWeight: '500', display: 'block', color: '#334155' }}>{comp.name}</span>
-                                    <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{comp.domain || 'Sin dominio'}</span>
+                        <div className="p-4 bg-slate-50 border-b border-slate-200">
+                            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Nueva Empresa</h4>
+                            <form onSubmit={handleAddCompany} className="flex flex-col gap-3">
+                                <input
+                                    type="text"
+                                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none"
+                                    placeholder="Nombre de la empresa"
+                                    value={newCompanyName}
+                                    onChange={(e) => setNewCompanyName(e.target.value)}
+                                />
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none"
+                                        placeholder="Dominio (ej: acme.com)"
+                                        value={newCompanyDomain}
+                                        onChange={(e) => setNewCompanyDomain(e.target.value)}
+                                    />
+                                    <button
+                                        type="submit"
+                                        disabled={!newCompanyName.trim() || !newCompanyDomain.trim()}
+                                        className="bg-brand-600 text-white p-2 rounded-lg hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                    >
+                                        <Plus size={20} />
+                                    </button>
                                 </div>
-                                <button
-                                    onClick={() => removeCompany(comp.id)}
-                                    style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}
-                                    title="Eliminar Empresa"
-                                >
-                                    <Trash2 size={16} />
-                                </button>
-                            </li>
-                        ))}
-                    </ul>
+                            </form>
+                        </div>
 
-                    {/* DEMO DATA TOOL */}
-                    <div style={{ marginTop: '20px', paddingTop: '15px', borderTop: '1px dashed #e5e7eb' }}>
+                        <div className="max-h-[500px] overflow-y-auto custom-scrollbar">
+                            <ul className="divide-y divide-slate-100">
+                                {companies.map(comp => (
+                                    <li key={comp.id} className="p-4 hover:bg-slate-50 transition-colors flex justify-between items-center group">
+                                        <div>
+                                            <p className="font-semibold text-slate-800 text-sm">{comp.name}</p>
+                                            <p className="text-xs text-slate-500">{comp.domain || 'Sin dominio configurado'}</p>
+                                        </div>
+                                        <button
+                                            onClick={() => removeCompany(comp.id)}
+                                            className="text-slate-300 hover:text-rose-500 p-1.5 opacity-0 group-hover:opacity-100 transition-all"
+                                            title="Eliminar Empresa"
+                                        >
+                                            <Trash2 size={16} />
+                                        </button>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+
+                        <div className="p-3 bg-slate-50 border-t border-slate-200">
+                            <button
+                                onClick={async () => {
+                                    const { generateTransportesDemoData } = await import('../utils/demoData');
+                                    generateTransportesDemoData(companies, addCompany);
+                                }}
+                                className="w-full py-2 text-xs font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 rounded-lg hover:bg-emerald-100 transition-colors"
+                            >
+                                + Generar Datos Demo
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Maintenance Zone moved to side column for better layout in large screens */}
+                    <div className="bg-red-50 rounded-xl border border-red-100 p-5">
+                        <h3 className="flex items-center gap-2 text-red-700 font-bold mb-2">
+                            <AlertTriangle size={18} /> Zona de Riesgo
+                        </h3>
+                        <p className="text-xs text-red-600 mb-4 leading-relaxed">
+                            Acciones destructivas para mantenimiento de la base de datos.
+                            Elimina registros huérfanos que no pertenecen a ninguna empresa.
+                        </p>
                         <button
-                            onClick={async () => {
-                                const { generateTransportesDemoData } = await import('../utils/demoData');
-                                generateTransportesDemoData(companies, addCompany);
-                            }}
-                            className="btn-secondary"
-                            style={{ width: '100%', fontSize: '0.85rem', justifyContent: 'center', background: '#f0fdf4', color: '#15803d', borderColor: '#bbf7d0' }}
+                            onClick={handlePurgeLegacyData}
+                            className="w-full py-2 bg-white border border-red-200 text-red-600 text-xs font-bold rounded-lg hover:bg-red-50 hover:border-red-300 transition-colors shadow-sm"
                         >
-                            + Generar Datos Demo "Transportes del Sur"
+                            Eliminar Datos Huerfanos
                         </button>
                     </div>
                 </div>
 
-                {/* SECTION: USUARIOS */}
-                <div className="card" style={{ padding: '1.5rem' }}>
-                    <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid #e5e7eb', paddingBottom: '10px', marginBottom: '15px', color: '#1e293b', fontWeight: 'bold' }}>
-                        <Users size={20} /> Gestión de Usuarios
-                    </h3>
+                {/* SECTION: USUARIOS (Right Column - Wider) */}
+                <div className="xl:col-span-2 space-y-6">
+                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col min-h-[600px]">
+                        <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                            <div>
+                                <h3 className="font-bold text-slate-800 flex items-center gap-2 text-lg">
+                                    <Users size={20} className="text-brand-500" />
+                                    Gestión de Usuarios
+                                </h3>
+                                <p className="text-sm text-slate-500 mt-1">Autoriza y administra el acceso al sistema</p>
+                            </div>
 
-                    <div style={{ marginBottom: '1rem', color: '#64748b', fontSize: '0.9rem' }}>
-                        <p>Los usuarios deben registrarse ellos mismos en la página de registro. Aquí puedes autorizar su acceso.</p>
-                    </div>
-
-                    {/* COMPANY FILTER */}
-                    <div style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <label style={{ fontSize: '0.9rem', fontWeight: '500', color: '#334155' }}>Filtrar por Empresa:</label>
-                        <select
-                            value={filterCompanyId}
-                            onChange={(e) => setFilterCompanyId(e.target.value)}
-                            style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.9rem', backgroundColor: 'white', color: '#334155' }}
-                        >
-                            <option value="all">Todas las Empresas</option>
-                            {companies.map(c => (
-                                <option key={c.id} value={c.id}>{c.name}</option>
-                            ))}
-                        </select>
-                    </div>
-
-                    {/* PENDING AUTHORIZATIONS */}
-                    {pendingUsers.length > 0 && (
-                        <div style={{ marginBottom: '2rem', background: '#fff7ed', padding: '1rem', borderRadius: '8px', border: '1px solid #fed7aa' }}>
-                            <h4 style={{ color: '#c2410c', margin: '0 0 10px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <CheckCircle size={18} /> Solicitudes Pendientes
-                            </h4>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                {pendingUsers.map(u => (
-                                    <div key={u.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', padding: '10px', borderRadius: '6px', border: '1px solid #fdba74' }}>
-                                        <div>
-                                            <div style={{ fontWeight: '600', color: '#1e293b' }}>{u.name}</div>
-                                            <div style={{ fontSize: '0.85rem', color: '#64748b' }}>{u.email}</div>
-                                            <div style={{ fontSize: '0.75rem', color: '#f97316' }}>
-                                                Empresa: {companies.find(c => c.id === u.company_id)?.name || 'Desconocida'}
-                                            </div>
-                                        </div>
-                                        <div style={{ display: 'flex', gap: '10px' }}>
-                                            <button
-                                                onClick={() => handleAuthorize(u.id)}
-                                                className="btn-primary"
-                                                style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', backgroundColor: '#16a34a' }}
-                                            >
-                                                Autorizar
-                                            </button>
-                                            <button
-                                                onClick={() => handleRemoveUser(u.id)}
-                                                style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', padding: '0.4rem' }}
-                                                title="Rechazar"
-                                            >
-                                                <XCircle size={20} />
-                                            </button>
-                                        </div>
-                                    </div>
-                                ))}
+                            <div className="relative">
+                                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                <select
+                                    value={filterCompanyId}
+                                    onChange={(e) => setFilterCompanyId(e.target.value)}
+                                    className="pl-9 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium text-slate-600 focus:ring-2 focus:ring-brand-500 outline-none appearance-none cursor-pointer hover:bg-slate-100 transition-colors min-w-[200px]"
+                                >
+                                    <option value="all">Todas las Empresas</option>
+                                    {companies.map(c => (
+                                        <option key={c.id} value={c.id}>{c.name}</option>
+                                    ))}
+                                </select>
                             </div>
                         </div>
-                    )}
 
-                    {/* Users List */}
-                    <h4 style={{ margin: '0 0 10px 0', fontSize: '1rem', color: '#64748b' }}>Usuarios Activos</h4>
-                    {loadingUsers ? <p>Cargando usuarios...</p> : (
-                        <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
-                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
-                                <thead>
-                                    <tr style={{ textAlign: 'left', color: '#64748b', fontSize: '0.8rem' }}>
-                                        <th style={{ paddingBottom: '8px' }}>Usuario</th>
-                                        <th style={{ paddingBottom: '8px' }}>Rol</th>
-                                        <th style={{ paddingBottom: '8px' }}>Empresa</th>
-                                        <th style={{ paddingBottom: '8px' }}></th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {authorizedUsers.map(u => (
-                                        <tr key={u.id} style={{ borderTop: '1px solid #f1f5f9' }}>
-                                            <td style={{ padding: '8px 0' }}>
-                                                <div style={{ fontWeight: '500', color: '#334155' }}>{u.name}</div>
-                                                <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{u.email}</div>
-                                            </td>
-                                            <td style={{ padding: '8px 0' }}>
-                                                <button
-                                                    onClick={() => handleRoleChange(u.id, u.role)}
-                                                    style={{
-                                                        background: u.role === 'admin' ? '#dbeafe' : '#f1f5f9',
-                                                        color: u.role === 'admin' ? '#1e40af' : '#475569',
-                                                        padding: '2px 8px',
-                                                        borderRadius: '4px',
-                                                        fontSize: '0.75rem',
-                                                        border: '1px solid transparent',
-                                                        cursor: 'pointer',
-                                                        transition: 'all 0.2s'
-                                                    }}
-                                                    title="Click para cambiar rol"
-                                                >
-                                                    {u.role || 'user'}
-                                                </button>
-                                            </td>
-                                            <td style={{ padding: '8px 0', color: '#64748b' }}>
-                                                {/* Edit Company Dropdown */}
-                                                <select
-                                                    value={u.company_id || ''}
-                                                    onChange={(e) => handleCompanyChange(u.id, e.target.value)}
-                                                    style={{
-                                                        padding: '2px 4px',
-                                                        fontSize: '0.8rem',
-                                                        borderRadius: '4px',
-                                                        border: '1px solid #cbd5e1',
-                                                        background: 'white',
-                                                        maxWidth: '100%'
-                                                    }}
-                                                >
-                                                    <option value="" disabled>Seleccionar...</option>
-                                                    {companies.map(c => (
-                                                        <option key={c.id} value={c.id}>{c.name}</option>
-                                                    ))}
-                                                </select>
-                                            </td>
-                                            <td style={{ textAlign: 'right', padding: '8px 0' }}>
-                                                <button
-                                                    onClick={() => handleRemoveUser(u.id)}
-                                                    style={{ color: '#cbd5e1', cursor: 'pointer', background: 'none', border: 'none' }}
-                                                    className="hover-danger"
-                                                >
-                                                    <Trash2 size={14} />
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                        <div className="p-5 flex-1 bg-slate-50/30">
+
+                            {/* Pending Requests */}
+                            {pendingUsers.length > 0 && (
+                                <div className="mb-8 animate-in slide-in-from-top-2">
+                                    <h4 className="text-xs font-bold text-amber-600 uppercase tracking-wider mb-3 flex items-center gap-2">
+                                        <CheckCircle size={14} /> Solicitudes Pendientes ({pendingUsers.length})
+                                    </h4>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                        {pendingUsers.map(u => (
+                                            <div key={u.id} className="bg-white p-4 rounded-xl border-l-4 border-l-amber-400 border-y border-r border-slate-200 shadow-sm flex justify-between items-center group hover:shadow-md transition-all">
+                                                <div>
+                                                    <div className="font-bold text-slate-800">{u.name}</div>
+                                                    <div className="text-xs text-slate-500 mb-1">{u.email}</div>
+                                                    <div className="inline-block px-1.5 py-0.5 bg-amber-50 text-amber-700 text-[10px] font-bold rounded uppercase">
+                                                        {companies.find(c => c.id === u.company_id)?.name || 'Desconocida'}
+                                                    </div>
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        onClick={() => handleAuthorize(u.id)}
+                                                        className="p-2 bg-emerald-100 text-emerald-600 rounded-lg hover:bg-emerald-200 transition-colors"
+                                                        title="Aprobar"
+                                                    >
+                                                        <CheckCircle size={18} />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleRemoveUser(u.id)}
+                                                        className="p-2 bg-rose-100 text-rose-600 rounded-lg hover:bg-rose-200 transition-colors"
+                                                        title="Rechazar"
+                                                    >
+                                                        <Trash2 size={18} />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Active Users Table */}
+                            <div>
+                                <div className="flex justify-between items-center mb-4">
+                                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                                        Usuarios Activos
+                                    </h4>
+                                    <span className="text-xs font-medium text-slate-400 bg-slate-100 px-2 py-1 rounded-full">
+                                        {authorizedUsers.length} usuarios
+                                    </span>
+                                </div>
+
+                                {loadingUsers ? (
+                                    <div className="text-center py-12 text-slate-400 italic">Cargando usuarios...</div>
+                                ) : (
+                                    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+                                        <table className="w-full text-sm text-left">
+                                            <thead className="bg-slate-50 text-slate-500 font-bold text-xs uppercase border-b border-slate-200">
+                                                <tr>
+                                                    <th className="px-5 py-3">Usuario</th>
+                                                    <th className="px-5 py-3 text-center">Rol</th>
+                                                    <th className="px-5 py-3">Empresa</th>
+                                                    <th className="px-5 py-3 text-right">Acciones</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-100">
+                                                {authorizedUsers.map(u => (
+                                                    <tr key={u.id} className="hover:bg-slate-50 transition-colors">
+                                                        <td className="px-5 py-3">
+                                                            <div className="font-semibold text-slate-700">{u.name}</div>
+                                                            <div className="text-xs text-slate-400">{u.email}</div>
+                                                        </td>
+                                                        <td className="px-5 py-3 text-center">
+                                                            <button
+                                                                onClick={() => handleRoleChange(u.id, u.role)}
+                                                                className={`px-2.5 py-1 rounded text-xs font-bold uppercase transition-all border ${u.role === 'admin'
+                                                                    ? 'bg-purple-50 text-purple-600 border-purple-200 hover:bg-purple-100'
+                                                                    : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
+                                                                    }`}
+                                                            >
+                                                                {u.role || 'user'}
+                                                            </button>
+                                                        </td>
+                                                        <td className="px-5 py-3">
+                                                            <select
+                                                                value={u.company_id || ''}
+                                                                onChange={(e) => handleCompanyChange(u.id, e.target.value)}
+                                                                className="bg-transparent text-sm text-slate-600 border-none focus:ring-0 cursor-pointer hover:text-brand-600 font-medium py-0 pl-0"
+                                                            >
+                                                                <option value="" disabled>Seleccionar...</option>
+                                                                {companies.map(c => (
+                                                                    <option key={c.id} value={c.id}>{c.name}</option>
+                                                                ))}
+                                                            </select>
+                                                        </td>
+                                                        <td className="px-5 py-3 text-right flex justify-end gap-2">
+                                                            <button
+                                                                onClick={() => handleStatusChange(u.id)}
+                                                                className="text-slate-300 hover:text-amber-500 p-1.5 rounded-md hover:bg-amber-50 transition-colors"
+                                                                title="Desactivar Acceso"
+                                                            >
+                                                                <Ban size={16} />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleRemoveUser(u.id)}
+                                                                className="text-slate-300 hover:text-rose-500 p-1.5 rounded-md hover:bg-rose-50 transition-colors"
+                                                                title="Eliminar Usuario"
+                                                            >
+                                                                <Trash2 size={16} />
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                    )}
+                    </div>
                 </div>
-            </div>
-
-            {/* NEW MAINTENANCE SECTION */}
-            <div className="card" style={{ marginTop: '2rem', padding: '1.5rem', borderColor: '#fee2e2' }}>
-                <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#b91c1c', fontWeight: 'bold', marginBottom: '1rem' }}>
-                    <Trash2 size={20} /> Zona de Mantenimiento
-                </h3>
-                <p style={{ fontSize: '0.9rem', color: '#7f1d1d', marginBottom: '1rem' }}>
-                    Utilice estas herramientas para limpiar datos antiguos o corruptos que no están asignados a ninguna empresa válida.
-                    Esto eliminará tareas de 5S, Quick Wins, A3 y VSM que no tengan asociada una empresa.
-                </p>
-                <button
-                    onClick={handlePurgeLegacyData}
-                    className="btn-secondary"
-                    style={{ background: '#fef2f2', color: '#dc2626', borderColor: '#fca5a5' }}
-                >
-                    Eliminar Datos Huerfanos (Sin Empresa)
-                </button>
             </div>
         </div>
     );

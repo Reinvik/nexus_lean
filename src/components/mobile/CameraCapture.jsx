@@ -24,7 +24,13 @@ const CameraCapture = ({ onCapture, currentImage, label = "Tomar Foto" }) => {
                 // In a real app, here we would upload to storage and return the URL
                 // For this prototype, we pass the local base64/blob URL back
                 // In production: await uploadService.upload(file) -> url
-                onCapture(result);
+                if (onCapture.length > 1) {
+                    // If onCapture accepts 2 args (file, previewUrl), pass both
+                    onCapture(file, result);
+                } else {
+                    onCapture(result);
+                }
+
                 setLoading(false);
             };
             reader.readAsDataURL(file);
