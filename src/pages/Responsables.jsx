@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../context/AuthContext';
+import { useData } from '../context/DataContext';
 import HeaderWithFilter from '../components/HeaderWithFilter';
 import { sendTaskReminder } from '../services/emailService';
 import { User, CheckCircle, Clock, AlertCircle, TrendingUp, Award, List, ChevronRight, Briefcase, Activity, Mail, Loader2 } from 'lucide-react';
@@ -9,90 +10,23 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 
 const ResponsablesPage = () => {
     const { user, companyUsers, globalFilterCompanyId } = useAuth();
+    const { fiveSCards, quickWinsData, vsmData, a3Data, loadingResponsables: loading, fetchResponsablesData, fetchFiveSCards } = useData();
     const navigate = useNavigate();
     const [selectedResponsible, setSelectedResponsible] = useState(null);
     const [taskFilter, setTaskFilter] = useState('all'); // 'all', 'completed', 'in_progress', 'pending'
     const [sendingEmail, setSendingEmail] = useState(false);
 
-    const [fiveSData, setFiveSData] = useState([]);
-    const [quickWinsData, setQuickWinsData] = useState([]);
-    const [vsmData, setVsmData] = useState([]);
-    const [a3Data, setA3Data] = useState([]);
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-        if (user) {
-            fetchAllData();
-        }
-    }, [user, globalFilterCompanyId]);
-
-    const fetchAllData = async () => {
-        setLoading(true);
-        try {
-            const [fiveSRes, quickWinsRes, vsmRes, a3Res] = await Promise.all([
-                supabase.from('five_s_cards').select('*'),
-                supabase.from('quick_wins').select('*'),
-                supabase.from('vsm_projects').select('*'),
-                supabase.from('a3_projects').select('*')
-            ]);
-
-            // Map and Set 5S
-            if (fiveSRes.data) {
-                setFiveSData(fiveSRes.data.map(c => ({
-                    id: c.id,
-                    responsible: c.responsible,
-                    status: c.status,
-                    reason: c.reason,
-                    article: c.article,
-                    location: c.location,
-                    date: c.date,
-                    companyId: c.company_id
-                })));
-            }
-
-            // Map and Set Quick Wins
-            if (quickWinsRes.data) {
-                setQuickWinsData(quickWinsRes.data.map(w => ({
-                    id: w.id,
-                    responsible: w.responsible,
-                    status: w.status, // done, idea
-                    title: w.title,
-                    date: w.date, // Added date
-                    companyId: w.company_id
-                })));
-            }
-
-            // Map and Set VSM
-            if (vsmRes.data) {
-                setVsmData(vsmRes.data.map(v => ({
-                    id: v.id,
-                    responsible: v.responsible,
-                    status: v.status, // current, future
-                    name: v.name,
-                    date: v.date, // Added date
-                    companyId: v.company_id
-                })));
-            }
-
-            // Map and Set A3
-            if (a3Res.data) {
-                setA3Data(a3Res.data.map(p => ({
-                    id: p.id,
-                    responsible: p.responsible,
-                    status: p.status, // Cerrado, En Proceso, Nuevo
-                    title: p.title,
-                    created_at: p.created_at, // Added created_at
-                    actionPlan: p.action_plan || [], // Include Action Plan
-                    companyId: p.company_id
-                })));
-            }
-
-        } catch (error) {
-            console.error("Error fetching aggregated data:", error);
-        } finally {
-            setLoading(false);
-        }
-    };
+    // Map 5S cards to the format expected by Responsables page
+    const fiveSData = useMemo(() => fiveSCards.map(c => ({
+        id: c.id,
+        responsible: c.responsible,
+        status: c.status,
+        reason: c.reason,
+        article: c.article,
+        location: c.location,
+        date: c.date,
+        companyId: c.companyId
+    })), [fiveSCards]);
 
     // Filter Helper: checks if an item belongs to the currently viewed company context
     const isVisible = (item) => {

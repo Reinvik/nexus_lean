@@ -4,6 +4,12 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+    body {
+        @apply bg-slate-900 text-slate-200;
+    }
+}
+
 @layer components {
     .card {
         @apply bg-white rounded-xl shadow-sm border border-slate-200 p-6;

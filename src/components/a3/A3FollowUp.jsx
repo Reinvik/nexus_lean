@@ -418,10 +418,10 @@ const A3FollowUp = ({ data = {}, onChange }) => {
                                                 label={{ value: `Meta: ${kpiGoal}%`, position: 'right', fill: '#10b981', fontSize: 10, fontWeight: 'bold' }}
                                             />
                                         )}
-                                        <Line type="monotone" dataKey="oee" stroke="#06b6d4" strokeWidth={3} name="OEE" dot={{ fill: '#06b6d4', r: 4 }} />
-                                        <Line type="monotone" dataKey="availability" stroke="#3b82f6" strokeWidth={1.5} strokeDasharray="3 3" name="Disponibilidad" dot={false} />
-                                        <Line type="monotone" dataKey="performance" stroke="#f59e0b" strokeWidth={1.5} strokeDasharray="3 3" name="Rendimiento" dot={false} />
-                                        <Line type="monotone" dataKey="quality" stroke="#10b981" strokeWidth={1.5} strokeDasharray="3 3" name="Calidad" dot={false} />
+                                        <Line type="monotone" dataKey="oee" stroke="#06b6d4" strokeWidth={3} name="OEE" dot={{ fill: '#06b6d4', r: 4 }} isAnimationActive={false} />
+                                        <Line type="monotone" dataKey="availability" stroke="#3b82f6" strokeWidth={1.5} strokeDasharray="3 3" name="Disponibilidad" dot={false} isAnimationActive={false} />
+                                        <Line type="monotone" dataKey="performance" stroke="#f59e0b" strokeWidth={1.5} strokeDasharray="3 3" name="Rendimiento" dot={false} isAnimationActive={false} />
+                                        <Line type="monotone" dataKey="quality" stroke="#10b981" strokeWidth={1.5} strokeDasharray="3 3" name="Calidad" dot={false} isAnimationActive={false} />
                                     </LineChart>
                                 </ResponsiveContainer>
                             ) : kpiType !== 'oee' && sortedData.length > 0 ? (
@@ -429,8 +429,8 @@ const A3FollowUp = ({ data = {}, onChange }) => {
                                     <AreaChart data={sortedData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                                         <defs>
                                             <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                                                <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.1} />
-                                                <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                                                <stop offset="5%" stopColor="#10b981" stopOpacity={0.1} />
+                                                <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
                                             </linearGradient>
                                         </defs>
                                         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
@@ -497,13 +497,14 @@ const A3FollowUp = ({ data = {}, onChange }) => {
                                         <Area
                                             type="monotone"
                                             dataKey="value"
-                                            stroke="#6366f1"
+                                            stroke="#10b981"
                                             strokeWidth={3}
                                             fillOpacity={1}
                                             fill="url(#colorValue)"
                                             name={kpiName || 'Valor Real'}
-                                            activeDot={{ r: 6, strokeWidth: 0, fill: '#2563eb' }}
+                                            activeDot={{ r: 6, strokeWidth: 0, fill: '#10b981' }}
                                             connectNulls={true}
+                                            isAnimationActive={false}
                                         />
                                     </AreaChart>
                                 </ResponsiveContainer>

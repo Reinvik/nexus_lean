@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
-import { Mail, Lock, ArrowRight, Loader2 } from 'lucide-react';
+import { Mail, Lock, ArrowRight, Loader2, WifiOff, ClipboardCheck } from 'lucide-react';
 
 const LoginPage = () => {
     const { login, user, loading } = useAuth();
@@ -143,6 +143,25 @@ const LoginPage = () => {
                                 Solicitar acceso
                             </Link>
                         </p>
+
+                        <div className="mt-8 pt-6 border-t border-slate-700/50">
+                            <div className="grid grid-cols-1 gap-3">
+                                <Link
+                                    to="/offline-access"
+                                    className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium text-slate-400 bg-slate-800/50 hover:bg-slate-800 hover:text-white rounded-lg transition-all border border-slate-700/50 hover:border-slate-600"
+                                >
+                                    <WifiOff size={16} />
+                                    Tarjeta 5S (Offline)
+                                </Link>
+                                <Link
+                                    to="/offline-audit"
+                                    className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium text-slate-400 bg-slate-800/50 hover:bg-slate-800 hover:text-white rounded-lg transition-all border border-slate-700/50 hover:border-slate-600"
+                                >
+                                    <ClipboardCheck size={16} />
+                                    Auditoría 5S (Offline)
+                                </Link>
+                            </div>
+                        </div>
                     </div>
                 </div>
 

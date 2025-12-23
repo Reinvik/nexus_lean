@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { supabase } from '../supabaseClient';
 import { Camera, Loader, X, Upload } from 'lucide-react';
 
-const ImageUpload = ({ onUpload, currentImage, bucketName = 'images', placeholderText = "Subir Imagen" }) => {
+const ImageUpload = ({ onUpload, currentImage, bucketName = 'images', placeholderText = "Subir Imagen", onFileSelect = null }) => {
     const [uploading, setUploading] = useState(false);
     const [preview, setPreview] = useState(currentImage);
 
@@ -18,6 +18,15 @@ const ImageUpload = ({ onUpload, currentImage, bucketName = 'images', placeholde
             const fileExt = file.name.split('.').pop();
             const fileName = `${Math.random().toString(36).substring(2, 15)}_${Date.now()}.${fileExt}`;
             const filePath = `${fileName}`;
+
+            if (onFileSelect) {
+                // Return file directly for manual handling (offline mode or parent controlled)
+                // Generate a local preview url
+                const objectUrl = URL.createObjectURL(file);
+                setPreview(objectUrl);
+                onFileSelect(file, objectUrl);
+                return;
+            }
 
             let { error: uploadError } = await supabase.storage
                 .from(bucketName)
@@ -44,7 +53,11 @@ const ImageUpload = ({ onUpload, currentImage, bucketName = 'images', placeholde
     const handleRemove = (e) => {
         e.stopPropagation();
         setPreview(null);
-        onUpload(null);
+        if (onFileSelect) {
+            onFileSelect(null, null);
+        } else if (onUpload) {
+            onUpload(null);
+        }
     };
 
     return (

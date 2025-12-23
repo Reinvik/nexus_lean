@@ -1,10 +1,13 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
+import { offlineService } from '../services/offlineService';
 import { useLocation } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../context/AuthContext';
+import { useData } from '../context/DataContext';
 import HeaderWithFilter from '../components/HeaderWithFilter';
-import { Plus, Search, Filter, Camera, X, Calendar, MapPin, User, FileText, CheckCircle, AlertCircle, Clock, PieChart as PieIcon, BarChart as BarIcon, ChevronDown, Activity, ArrowRight, Trash2 } from 'lucide-react';
+import { Plus, Search, Filter, Camera, X, Calendar, MapPin, User, FileText, CheckCircle, AlertCircle, Clock, PieChart as PieIcon, BarChart as BarIcon, ChevronDown, Activity, ArrowRight, Trash2, CloudOff } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { AuditService } from '../services/AuditService';
 import ImageUpload from '../components/ImageUpload';
 import StatCard from '../components/StatCard';
 import MobileFab from '../components/mobile/MobileFab';
@@ -12,67 +15,133 @@ import CameraCapture from '../components/mobile/CameraCapture';
 
 const FiveSPage = () => {
     const { user, companyUsers, globalFilterCompanyId } = useAuth();
+    const { fiveSCards: cards, loadingFiveS: loading, fetchFiveSCards, addFiveSCard, updateFiveSCard, removeFiveSCard } = useData();
     const location = useLocation();
     const [selectedCard, setSelectedCard] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterResponsible, setFilterResponsible] = useState('');
     const [filterLocation, setFilterLocation] = useState('');
 
-    // Datos iniciales
-    const [cards, setCards] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const [showHistory, setShowHistory] = useState(false);
 
-    // Cargar datos de Supabase
+    // --- OFFLINE SYNC STATE ---
+    const [isSyncing, setIsSyncing] = useState(false);
+
+    // Derive offline count directly from cards to ensure UI consistency
+    const offlineCount = useMemo(() => cards.filter(c => c.isOffline).length, [cards]);
+
+    // Auto-sync when back online
     useEffect(() => {
-        if (user) {
-            fetchCards();
-        }
-    }, [user, globalFilterCompanyId]);
+        const handleOnline = () => {
+            console.log("App is back online! Syncing...");
+            syncOfflineCards();
+        };
+        window.addEventListener('online', handleOnline);
+        return () => window.removeEventListener('online', handleOnline);
+    }, []);
 
-    const fetchCards = async () => {
+    // Data is now prefetched in DataContext on login.
+    // No need for local fetchCards effect.
+
+
+    const uploadFileToSupabase = async (file) => {
+        const fileExt = file.name ? file.name.split('.').pop() : 'jpg';
+        const fileName = `${Math.random().toString(36).substring(2, 15)}_${Date.now()}.${fileExt}`;
+        const filePath = `${fileName}`;
+
+        const { error } = await supabase.storage.from('images').upload(filePath, file);
+        if (error) throw error;
+
+        const { data } = supabase.storage.from('images').getPublicUrl(filePath);
+        return data.publicUrl;
+    };
+
+    const syncOfflineCards = async () => {
+        // Prevent double syncs
+        if (isSyncing) return;
+
         try {
-            setLoading(true);
-            const { data, error } = await supabase
-                .from('five_s_cards')
-                .select('*')
-                .order('created_at', { ascending: false });
+            setIsSyncing(true);
 
-            if (error) throw error;
+            // 1. Get cards from IDB
+            const offlineCards = await offlineService.getAllCards();
 
-            if (data) {
-                // 1. Sort by created_at ASCENDING to assign numbering (1st created = #1)
-                const sortedByCreation = data.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-
-                // 2. Map with numbering
-                const formatted = sortedByCreation.map((c, index) => ({
-                    id: c.id,
-                    cardNumber: index + 1, // Virtual Number based on creation order
-                    date: c.date,
-                    location: c.location,
-                    article: c.article,
-                    reporter: c.reporter,
-                    reason: c.reason,
-                    proposedAction: c.proposed_action,
-                    responsible: c.responsible,
-                    targetDate: c.target_date,
-                    solutionDate: c.solution_date,
-                    status: c.status,
-                    statusColor: c.status === 'Cerrado' ? '#10b981' : (c.status === 'En Proceso' ? '#f59e0b' : '#ef4444'),
-                    type: c.type,
-                    imageBefore: c.image_before, // Fixed column name
-                    imageAfter: c.image_after,   // Fixed column name
-                    companyId: c.company_id
-                }));
-
-                // 3. Reverse to show newest first in UI
-                setCards(formatted.reverse());
+            if (offlineCards.length === 0) {
+                // If IDB is empty but UI shows offline cards, we have a state mismatch. 
+                // Force a refresh.
+                if (offlineCount > 0) {
+                    alert("No se encontraron datos locales. Actualizando lista...");
+                    fetchFiveSCards();
+                } else {
+                    alert("No hay tarjetas pendientes para sincronizar.");
+                }
+                return;
             }
+
+            // Notify user we are starting (if called manually)
+            console.log(`Intentando sincronizar ${offlineCards.length} tarjetas...`);
+
+            let successCount = 0;
+            let errorCount = 0;
+            let errors = [];
+
+            for (const cardRecord of offlineCards) {
+                try {
+                    // Upload Images First
+                    let urlBefore = cardRecord.data.image_before;
+                    let urlAfter = cardRecord.data.image_after;
+
+                    // Upload Image Before
+                    if (cardRecord.files && cardRecord.files.imageBefore instanceof Blob) {
+                        urlBefore = await uploadFileToSupabase(cardRecord.files.imageBefore);
+                    }
+
+                    // Upload Image After
+                    if (cardRecord.files && cardRecord.files.imageAfter instanceof Blob) {
+                        urlAfter = await uploadFileToSupabase(cardRecord.files.imageAfter);
+                    }
+
+                    // Prepare payload for Supabase
+                    const payload = {
+                        ...cardRecord.data,
+                        image_before: urlBefore,
+                        image_after: urlAfter,
+                        company_id: cardRecord.data.company_id || user.companyId || (globalFilterCompanyId !== 'all' ? globalFilterCompanyId : null)
+                    };
+
+                    // Insert to Supabase
+                    const { error } = await supabase.from('five_s_cards').insert([payload]);
+                    if (error) throw new Error(error.message);
+
+                    // Remove from IDB on success
+                    await offlineService.deleteCard(cardRecord.tempId);
+                    successCount++;
+
+                } catch (err) {
+                    console.error(`Failed to sync card ${cardRecord.tempId}:`, err);
+                    errorCount++;
+                    errors.push(err.message);
+                }
+            }
+
+            // Always refetch live data to update UI
+            await fetchFiveSCards();
+
+            // Feedback
+            if (successCount > 0 && errorCount === 0) {
+                alert(`¡Sincronización exitosa! Se subieron ${successCount} tarjetas.`);
+            } else if (errorCount > 0) {
+                alert(`Sincronización parcial.\nSubidas: ${successCount}\nFallidos: ${errorCount}\nErrores: ${errors.join(', ')}`);
+            }
+
         } catch (error) {
-            console.error('Error fetching 5S cards:', error);
+            console.error("Critical Sync error:", error);
+            alert("Error crítico al sincronizar: " + error.message);
         } finally {
-            setLoading(false);
+            setIsSyncing(false);
         }
     };
+
 
     // Handle deep linking via query params
     useEffect(() => {
@@ -95,6 +164,7 @@ const FiveSPage = () => {
         const targetCompanyId = isSuperAdmin ? globalFilterCompanyId : user.companyId;
 
         if (targetCompanyId === 'all') return cards;
+        if (!targetCompanyId) return cards; // If no company ID (e.g. fallback), show what RLS returns
 
         return cards.filter(c => c.companyId === targetCompanyId || c.responsible === user.name || !c.companyId);
     }, [cards, user, globalFilterCompanyId]);
@@ -199,7 +269,9 @@ const FiveSPage = () => {
         setSelectedCard({ ...card });
     };
 
-    // Guardar Tarjeta
+    // ... existing helper
+
+    // Guardar Tarjeta (Offline Aware)
     const handleSaveCard = async () => {
         if (!selectedCard.location || !selectedCard.reason) {
             alert("Por favor completa al menos la ubicación y el hallazgo.");
@@ -214,22 +286,17 @@ const FiveSPage = () => {
             }
         }
 
-        // AUTO-ASSIGN COMPANY based on Responsible (like QuickWins, VSM, A3)
+        // AUTO-ASSIGN COMPANY based on Responsible
         let idToAssign = selectedCard.companyId;
-
-        // Try to get company from the assigned responsible user
         if (companyUsers && selectedCard.responsible) {
             const responsibleUser = companyUsers.find(u => u.name === selectedCard.responsible);
-            if (responsibleUser && responsibleUser.company_id) {
-                idToAssign = responsibleUser.company_id;
-            }
+            if (responsibleUser && responsibleUser.company_id) idToAssign = responsibleUser.company_id;
         }
-
-        // Fallback to current user's company or global filter
         if (!idToAssign) {
             idToAssign = user.companyId || (globalFilterCompanyId !== 'all' ? globalFilterCompanyId : null);
         }
 
+        // Prepare Base Data
         const cardData = {
             date: selectedCard.date,
             location: selectedCard.location,
@@ -242,60 +309,151 @@ const FiveSPage = () => {
             solution_date: selectedCard.solutionDate || null,
             status: selectedCard.status,
             type: selectedCard.type,
-            image_before: selectedCard.imageBefore,
-            image_after: selectedCard.imageAfter,
             company_id: idToAssign
         };
 
+        const isOffline = !window.navigator.onLine;
+
         try {
-            if (selectedCard.id) {
-                // Update
+            if (isOffline) {
+                // --- OFFLINE SAVE ---
+                if (selectedCard.id) {
+                    alert("En modo offline solo puedes crear nuevas tarjetas, no editar existentes.");
+                    return;
+                }
+
+                // Prepare file blobs for saving
+                // We expect 'imageBeforeFile' and 'imageAfterFile' to be present if new files were selected
+
+                // Clean data for storage (remove UI props)
+                const savePayload = { ...cardData };
+                // Note: image_before/after URLs are not useful for offline DB, we need the files.
+                // The service handles the 'files' object separately.
+
+                const savedRecord = await offlineService.saveCard(
+                    savePayload,
+                    selectedCard.imageBeforeFile,
+                    selectedCard.imageAfterFile
+                );
+
+                // Create Optimistic UI Card
+                const optimisticCard = {
+                    id: savedRecord.tempId,
+                    cardNumber: 'OFF',
+                    ...cardData,
+                    status: 'Pendiente de subir',
+                    statusColor: '#94a3b8',
+                    isOffline: true,
+                    // Create preview URLs for immediate display
+                    imageBefore: selectedCard.imageBeforeFile ? URL.createObjectURL(selectedCard.imageBeforeFile) : selectedCard.imageBefore,
+                    imageAfter: selectedCard.imageAfterFile ? URL.createObjectURL(selectedCard.imageAfterFile) : selectedCard.imageAfter,
+                };
+
+                // Add to state immediately (prepend) via context
+                addFiveSCard(optimisticCard);
+
+                alert("Sin conexión: Tarjeta guardada localmente. Se subirá automáticamente cuando recuperes la conexión.");
+                handleCloseModal();
+
+            } else {
+                // --- ONLINE SAVE ---
+                let finalUrlBefore = selectedCard.imageBefore;
+                let finalUrlAfter = selectedCard.imageAfter;
+
+                if (selectedCard.imageBeforeFile) {
+                    finalUrlBefore = await uploadFileToSupabase(selectedCard.imageBeforeFile);
+                }
+                if (selectedCard.imageAfterFile) {
+                    finalUrlAfter = await uploadFileToSupabase(selectedCard.imageAfterFile);
+                }
+
+                cardData.image_before = finalUrlBefore;
+                cardData.image_after = finalUrlAfter;
+
+                if (selectedCard.id) {
+                    // Update
+                    const { error } = await supabase
+                        .from('five_s_cards')
+                        .update(cardData)
+                        .eq('id', selectedCard.id);
+
+                    if (error) throw error;
+
+                    // Log Audit Update
+                    AuditService.logAction('UPDATE', '5S_CARD', selectedCard.id, {
+                        changes: cardData,
+                        previousStatus: selectedCard.status
+                    });
+
+                    // Optimistic update via context
+                    updateFiveSCard(selectedCard.id, {
+                        ...cardData,
+                        statusColor: cardData.status === 'Cerrado' ? '#10b981' : (cardData.status === 'En Proceso' ? '#f59e0b' : '#ef4444')
+                    });
+                } else {
+                    // Insert
+                    const { data, error } = await supabase
+                        .from('five_s_cards')
+                        .insert([cardData])
+                        .select();
+
+                    if (error) throw error;
+
+                    // Log Audit Create
+                    if (data && data[0]) {
+                        AuditService.logAction('CREATE', '5S_CARD', data[0].id, {
+                            initialData: cardData
+                        });
+                    }
+
+                    if (data) fetchFiveSCards(); // Re-fetch to get correct ID/Number
+                }
+                handleCloseModal();
+            }
+        } catch (error) {
+            console.error("Error saving card:", error);
+            alert("Error al guardar la tarjeta: " + error.message);
+        }
+    };
+
+
+    const handleDeleteCard = async () => {
+        if (!window.confirm("¿Estás seguro de que quieres eliminar esta tarjeta? Esta acción no se puede deshacer.")) {
+            return;
+        }
+
+        try {
+            if (selectedCard.isOffline) {
+                // Offline delete
+                await offlineService.deleteCard(selectedCard.id);
+                removeFiveSCard(selectedCard.id);
+                alert("Tarjeta local eliminada.");
+            } else {
+                // Online delete
                 const { error } = await supabase
                     .from('five_s_cards')
-                    .update(cardData)
+                    .delete()
                     .eq('id', selectedCard.id);
 
                 if (error) throw error;
 
-                // Optimistic Update
-                setCards(cards.map(c => c.id === selectedCard.id ? { ...selectedCard, ...cardData, statusColor: cardData.status === 'Cerrado' ? '#10b981' : (cardData.status === 'En Proceso' ? '#f59e0b' : '#ef4444') } : c));
-            } else {
-                // Insert
-                const { data, error } = await supabase
-                    .from('five_s_cards')
-                    .insert([cardData])
-                    .select();
+                // Log Audit Delete
+                AuditService.logAction('DELETE', '5S_CARD', selectedCard.id, {
+                    deletedData: {
+                        location: selectedCard.location,
+                        reason: selectedCard.reason,
+                        cardNumber: selectedCard.cardNumber,
+                        responsible: selectedCard.responsible
+                    }
+                });
 
-                if (error) throw error;
-
-                if (data) {
-                    fetchCards(); // Refetch to get ID
-                }
+                removeFiveSCard(selectedCard.id);
+                alert("Tarjeta eliminada correctamente.");
             }
             handleCloseModal();
         } catch (error) {
-            console.error("Error saving card:", error);
-            alert("Error al guardar la tarjeta");
-        }
-    };
-
-    const handleDeleteCard = async () => {
-        if (!selectedCard.id) return;
-        if (!window.confirm("¿Estás seguro de que deseas eliminar esta tarjeta? Esta acción no se puede deshacer.")) return;
-
-        try {
-            const { error } = await supabase
-                .from('five_s_cards')
-                .delete()
-                .eq('id', selectedCard.id);
-
-            if (error) throw error;
-
-            setCards(cards.filter(c => c.id !== selectedCard.id));
-            handleCloseModal();
-        } catch (error) {
             console.error("Error deleting card:", error);
-            alert("Error al eliminar la tarjeta");
+            alert("Error al eliminar la tarjeta: " + error.message);
         }
     };
 
@@ -303,6 +461,15 @@ const FiveSPage = () => {
         setSelectedCard(null);
     };
 
+    const handleFileSelect = (field, file, previewUrl) => {
+        // field is 'imageBefore' or 'imageAfter'
+        // We set the preview URL to the main field so the UI shows it
+        // We set the FILE object to a shadow field 'imageBeforeFile'
+        updateField(field, previewUrl);
+        updateField(field + 'File', file);
+    };
+
+    // Replace updateField to handle generic
     const updateField = (field, value) => {
         setSelectedCard(prev => ({ ...prev, [field]: value }));
     };
@@ -330,7 +497,7 @@ const FiveSPage = () => {
                     <input
                         type="text"
                         placeholder="Buscar por ubicación, artículo, responsable..."
-                        className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-all text-sm outline-none"
+                        className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-all text-sm outline-none text-black placeholder-slate-500"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
@@ -340,24 +507,24 @@ const FiveSPage = () => {
                 <div className="flex items-center gap-3 overflow-x-auto pb-1 sm:pb-0">
                     <div className="relative min-w-[200px]">
                         <select
-                            className="w-full pl-4 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-all text-sm appearance-none outline-none cursor-pointer"
+                            className="w-full pl-4 pr-10 py-2.5 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-all text-sm appearance-none outline-none cursor-pointer text-black font-medium"
                             value={filterResponsible}
                             onChange={(e) => setFilterResponsible(e.target.value)}
                         >
-                            <option value="">Todos los Responsables</option>
-                            {personSuggestions.map((p, i) => <option key={i} value={p}>{p}</option>)}
+                            <option value="" className="text-gray-500">Todos los Responsables</option>
+                            {personSuggestions.map((p, i) => <option key={i} value={p} className="text-black">{p}</option>)}
                         </select>
                         <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                     </div>
 
                     <div className="relative min-w-[180px]">
                         <select
-                            className="w-full pl-4 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-all text-sm appearance-none outline-none cursor-pointer"
+                            className="w-full pl-4 pr-10 py-2.5 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-all text-sm appearance-none outline-none cursor-pointer text-black font-medium"
                             value={filterLocation}
                             onChange={(e) => setFilterLocation(e.target.value)}
                         >
-                            <option value="">Todas las Áreas</option>
-                            {uniqueLocations.map((l, i) => <option key={i} value={l}>{l}</option>)}
+                            <option value="" className="text-gray-500">Todas las Áreas</option>
+                            {uniqueLocations.map((l, i) => <option key={i} value={l} className="text-black">{l}</option>)}
                         </select>
                         <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                     </div>
@@ -371,86 +538,164 @@ const FiveSPage = () => {
                             <X size={20} />
                         </button>
                     )}
+
+                    <button
+                        onClick={() => setShowHistory(true)}
+                        className="p-2.5 text-slate-500 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors flex-shrink-0"
+                        title="Ver Historial de Cambios"
+                    >
+                        <Clock size={20} />
+                    </button>
+
+                    {offlineCount > 0 && (
+                        <button
+                            onClick={syncOfflineCards}
+                            disabled={isSyncing}
+                            className={`ml-auto flex items-center gap-2 px-4 py-2.5 rounded-lg shadow-sm font-medium transition-all ${isSyncing
+                                ? 'bg-slate-100 text-slate-400 cursor-wait'
+                                : 'bg-yellow-500 hover:bg-yellow-600 text-white shadow-yellow-500/30'
+                                }`}
+                        >
+                            {isSyncing ? (
+                                <>
+                                    <div className="animate-spin h-4 w-4 border-2 border-slate-400 border-t-transparent rounded-full" />
+                                    <span>Sincronizando...</span>
+                                </>
+                            ) : (
+                                <>
+                                    <CloudOff size={20} />
+                                    <span>Sincronizar ({offlineCount})</span>
+                                </>
+                            )}
+                        </button>
+                    )}
                 </div>
             </div>
 
             {/* Cards Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {filteredCards.length > 0 ? filteredCards.map((card) => (
-                    <div
-                        key={card.id}
-                        className="group bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer flex flex-col h-full"
-                        onClick={() => handleCardClick(card)}
-                    >
-                        {/* Status Bar */}
-                        <div className="h-1.5 w-full transition-all" style={{ backgroundColor: card.statusColor }}></div>
-
-                        <div className="p-5 flex flex-col flex-1">
-                            {/* Header */}
-                            <div className="flex justify-between items-start mb-4">
-                                <span className="px-2.5 py-1 bg-slate-100 text-slate-600 rounded-md text-xs font-bold uppercase tracking-wider border border-slate-200 group-hover:bg-brand-50 group-hover:text-brand-600 group-hover:border-brand-100 transition-colors">
-                                    #{card.cardNumber ? String(card.cardNumber).padStart(3, '0') : '?'}
-                                </span>
-                                <span className="text-xs text-slate-400 font-medium flex items-center gap-1">
-                                    {card.date}
-                                </span>
-                            </div>
-
-                            {/* Content */}
-                            <div className="mb-4">
-                                <h4 className="font-bold text-slate-800 mb-1 line-clamp-1 text-lg group-hover:text-brand-600 transition-colors">{card.location}</h4>
-                                <p className="text-sm text-slate-500 line-clamp-2 leading-relaxed h-[42px]">{card.reason}</p>
-                            </div>
-
-                            {/* Images */}
-                            <div className="grid grid-cols-2 gap-0.5 bg-slate-100 rounded-lg overflow-hidden border border-slate-200 mb-4 h-32 relative">
-                                {card.imageBefore ? (
-                                    <div className="relative h-full overflow-hidden w-full">
-                                        <img src={card.imageBefore} alt="Antes" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                                        <span className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[9px] uppercase font-bold text-center py-1 backdrop-blur-sm">Antes</span>
-                                    </div>
-                                ) : (
-                                    <div className="flex items-center justify-center h-full bg-slate-50 text-slate-300 w-full">
-                                        <Camera size={20} />
-                                    </div>
-                                )}
-
-                                {card.imageAfter ? (
-                                    <div className="relative h-full overflow-hidden w-full">
-                                        <img src={card.imageAfter} alt="Después" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                                        <span className="absolute bottom-0 left-0 right-0 bg-emerald-600/80 text-white text-[9px] uppercase font-bold text-center py-1 backdrop-blur-sm">Después</span>
-                                    </div>
-                                ) : (
-                                    <div className="flex items-center justify-center h-full bg-slate-50 text-slate-200 border-l border-slate-200 w-full">
-                                        {card.imageBefore && <ArrowRight size={16} className="text-slate-300" />}
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Footer */}
-                            <div className="mt-auto pt-4 border-t border-slate-100 flex justify-between items-center bg-white">
-                                <div className="flex items-center gap-2">
-                                    <div className="w-6 h-6 rounded-full bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-600 border border-white shadow-sm ring-1 ring-slate-100">
-                                        {card.responsible ? card.responsible.charAt(0) : '?'}
-                                    </div>
-                                    <span className="text-xs font-medium text-slate-600 truncate max-w-[90px]">{card.responsible || 'Sin asignar'}</span>
+                {loading && cards.length === 0 ? (
+                    // SKELETON LOADERS
+                    Array.from({ length: 8 }).map((_, i) => (
+                        <div key={i} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden h-[380px] animate-pulse">
+                            <div className="h-1.5 bg-slate-200 w-full mb-0"></div>
+                            <div className="p-5 flex flex-col h-full">
+                                <div className="flex justify-between items-start mb-4">
+                                    <div className="h-6 w-16 bg-slate-200 rounded"></div>
+                                    <div className="h-4 w-20 bg-slate-200 rounded"></div>
                                 </div>
-                                <div className="flex items-center gap-1.5">
-                                    <div className="w-2 h-2 rounded-full shadow-sm" style={{ backgroundColor: card.statusColor }}></div>
-                                    <span className="text-xs font-bold" style={{ color: card.statusColor }}>{card.status}</span>
+                                <div className="space-y-3 mb-6">
+                                    <div className="h-6 w-3/4 bg-slate-200 rounded"></div>
+                                    <div className="h-4 w-full bg-slate-200 rounded"></div>
+                                    <div className="h-4 w-5/6 bg-slate-200 rounded"></div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-0.5 mb-4 h-32">
+                                    <div className="bg-slate-200 h-full w-full"></div>
+                                    <div className="bg-slate-200 h-full w-full"></div>
+                                </div>
+                                <div className="mt-auto pt-4 flex justify-between items-center">
+                                    <div className="flex items-center gap-2">
+                                        <div className="h-6 w-6 rounded-full bg-slate-200"></div>
+                                        <div className="h-4 w-20 bg-slate-200 rounded"></div>
+                                    </div>
+                                    <div className="h-4 w-16 bg-slate-200 rounded"></div>
                                 </div>
                             </div>
                         </div>
-                    </div>
-                )) : (
-                    <div className="col-span-full py-16 text-center bg-slate-50/50 rounded-2xl border-2 border-dashed border-slate-200">
-                        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-white shadow-sm mb-4">
-                            <Search size={32} className="text-slate-300" />
+                    ))
+                ) : filteredCards.length > 0 ?
+                    filteredCards.map((card) => (
+                        <div
+                            key={card.id}
+                            className={`group bg-white rounded-xl shadow-sm border ${card.isOffline ? 'border-dashed border-slate-400 bg-slate-50' : 'border-slate-200'} overflow-hidden hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer flex flex-col h-full`}
+                            onClick={() => {
+                                if (card.isOffline) {
+                                    if (window.confirm("Esta tarjeta está pendiente de subir. ¿Deseas intentar sincronizarla ahora?")) {
+                                        syncOfflineCards();
+                                    }
+                                } else {
+                                    handleCardClick(card);
+                                }
+                            }}
+                        >
+                            {/* Status Bar */}
+                            <div className={`h-1.5 w-full transition-all ${card.isOffline ? 'bg-slate-400' : ''}`} style={{ backgroundColor: !card.isOffline ? card.statusColor : undefined }}></div>
+
+                            <div className="p-5 flex flex-col flex-1">
+                                {/* Header */}
+                                <div className="flex justify-between items-start mb-4">
+                                    <span className={`px-2.5 py-1 rounded-md text-xs font-bold uppercase tracking-wider border transition-colors ${card.isOffline
+                                        ? 'bg-slate-200 text-slate-600 border-slate-300'
+                                        : 'bg-slate-100 text-slate-600 border-slate-200 group-hover:bg-brand-50 group-hover:text-brand-600 group-hover:border-brand-100'
+                                        }`}>
+                                        #{card.cardNumber ? String(card.cardNumber).padStart(3, '0') : '?'}
+                                    </span>
+                                    {card.isOffline ? (
+                                        <span className="text-xs text-slate-500 font-bold flex items-center gap-1 bg-yellow-100 px-2 py-0.5 rounded-full border border-yellow-200">
+                                            <CloudOff size={12} /> Pendiente
+                                        </span>
+                                    ) : (
+                                        <span className="text-xs text-slate-400 font-medium flex items-center gap-1">
+                                            {card.date}
+                                        </span>
+                                    )}
+                                </div>
+
+                                {/* Content */}
+                                <div className="mb-4">
+                                    <h4 className="font-bold text-slate-800 mb-1 line-clamp-1 text-lg group-hover:text-brand-600 transition-colors">{card.location}</h4>
+                                    <p className="text-sm text-slate-500 line-clamp-2 leading-relaxed h-[42px]">{card.reason}</p>
+                                </div>
+
+                                {/* Images */}
+                                <div className="grid grid-cols-2 gap-0.5 bg-slate-100 rounded-lg overflow-hidden border border-slate-200 mb-4 h-32 relative">
+                                    {card.imageBefore ? (
+                                        <div className="relative h-full overflow-hidden w-full">
+                                            <img src={card.imageBefore} alt="Antes" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                                            <span className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[9px] uppercase font-bold text-center py-1 backdrop-blur-sm">Antes</span>
+                                        </div>
+                                    ) : (
+                                        <div className="flex items-center justify-center h-full bg-slate-50 text-slate-300 w-full">
+                                            <Camera size={20} />
+                                        </div>
+                                    )}
+
+                                    {card.imageAfter ? (
+                                        <div className="relative h-full overflow-hidden w-full">
+                                            <img src={card.imageAfter} alt="Después" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                                            <span className="absolute bottom-0 left-0 right-0 bg-emerald-600/80 text-white text-[9px] uppercase font-bold text-center py-1 backdrop-blur-sm">Después</span>
+                                        </div>
+                                    ) : (
+                                        <div className="flex items-center justify-center h-full bg-slate-50 text-slate-200 border-l border-slate-200 w-full">
+                                            {card.imageBefore && <ArrowRight size={16} className="text-slate-300" />}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Footer */}
+                                <div className="mt-auto pt-4 border-t border-slate-100 flex justify-between items-center bg-white">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-6 h-6 rounded-full bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-600 border border-white shadow-sm ring-1 ring-slate-100">
+                                            {card.responsible ? card.responsible.charAt(0) : '?'}
+                                        </div>
+                                        <span className="text-xs font-medium text-slate-600 truncate max-w-[90px]">{card.responsible || 'Sin asignar'}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                        <div className="w-2 h-2 rounded-full shadow-sm" style={{ backgroundColor: card.statusColor }}></div>
+                                        <span className="text-xs font-bold" style={{ color: card.statusColor }}>{card.status}</span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                        <h3 className="text-lg font-medium text-slate-900 mb-1">No se encontraron tarjetas</h3>
-                        <p className="text-slate-500">Intenta ajustar los filtros de búsqueda.</p>
-                    </div>
-                )}
+                    )) : (
+                        <div className="col-span-full py-16 text-center bg-slate-50/50 rounded-2xl border-2 border-dashed border-slate-200">
+                            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-white shadow-sm mb-4">
+                                <Search size={32} className="text-slate-300" />
+                            </div>
+                            <h3 className="text-lg font-medium text-slate-900 mb-1">No se encontraron tarjetas</h3>
+                            <p className="text-slate-500">Intenta ajustar los filtros de búsqueda.</p>
+                        </div>
+                    )}
             </div>
 
             {/* KPI Dashboard Section (Footer) */}
@@ -500,8 +745,8 @@ const FiveSPage = () => {
                             <h4 className="text-center text-xs font-bold text-slate-500 mb-6 uppercase tracking-wider flex items-center justify-center gap-2">
                                 Distribución por Estado
                             </h4>
-                            <div className="h-[200px]">
-                                <ResponsiveContainer width="100%" height="100%">
+                            <div className="h-[200px]" style={{ width: '100%', height: 200 }}>
+                                <ResponsiveContainer width="100%" height="100%" minWidth={100} minHeight={100}>
                                     <PieChart>
                                         <Pie
                                             data={kpiData.statusData}
@@ -528,8 +773,8 @@ const FiveSPage = () => {
                             <h4 className="text-center text-xs font-bold text-slate-500 mb-6 uppercase tracking-wider flex items-center justify-center gap-2">
                                 Top Áreas con Hallazgos
                             </h4>
-                            <div className="h-[200px]">
-                                <ResponsiveContainer width="100%" height="100%">
+                            <div className="h-[200px]" style={{ width: '100%', height: 200 }}>
+                                <ResponsiveContainer width="100%" height="100%" minWidth={100} minHeight={100}>
                                     <BarChart data={kpiData.locationData} layout="vertical" margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
                                         <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
                                         <XAxis type="number" hide />
@@ -600,12 +845,12 @@ const FiveSPage = () => {
                             </div>
 
                             <div className="space-y-2">
-                                <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                                    <MapPin size={16} className="text-slate-400" /> Ubicación
+                                <label className="text-sm font-bold text-black flex items-center gap-2">
+                                    <MapPin size={16} className="text-slate-600" /> Ubicación
                                 </label>
                                 <input
                                     type="text"
-                                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none transition-all shadow-sm"
+                                    className="w-full p-3 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none transition-all font-medium text-black placeholder-slate-500 shadow-sm"
                                     value={selectedCard.location}
                                     onChange={e => updateField('location', e.target.value)}
                                     placeholder="Ej: Pasillo 4, Línea 2"
@@ -613,12 +858,12 @@ const FiveSPage = () => {
                             </div>
 
                             <div className="space-y-2">
-                                <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                                    <FileText size={16} className="text-slate-400" /> Artículo / Equipo
+                                <label className="text-sm font-bold text-black flex items-center gap-2">
+                                    <FileText size={16} className="text-slate-600" /> Artículo / Equipo
                                 </label>
                                 <input
                                     type="text"
-                                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none transition-all shadow-sm"
+                                    className="w-full p-3 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none transition-all font-medium text-black placeholder-slate-500 shadow-sm"
                                     value={selectedCard.article}
                                     onChange={e => updateField('article', e.target.value)}
                                     placeholder="Ej: Estantería B, Motor 3"
@@ -626,12 +871,12 @@ const FiveSPage = () => {
                             </div>
 
                             <div className="space-y-2">
-                                <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                                    <User size={16} className="text-slate-400" /> Reportado Por
+                                <label className="text-sm font-bold text-black flex items-center gap-2">
+                                    <User size={16} className="text-slate-600" /> Reportado Por
                                 </label>
                                 <input
                                     type="text"
-                                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none transition-all shadow-sm"
+                                    className="w-full p-3 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none transition-all font-medium text-black placeholder-slate-500 shadow-sm"
                                     value={selectedCard.reporter}
                                     onChange={e => updateField('reporter', e.target.value)}
                                     list="person-suggestions"
@@ -640,11 +885,11 @@ const FiveSPage = () => {
                             </div>
 
                             <div className="md:col-span-2 space-y-2">
-                                <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                                <label className="text-sm font-bold text-black flex items-center gap-2">
                                     <AlertCircle size={16} className="text-amber-500" /> Razón de Tarjeta (Hallazgo)
                                 </label>
                                 <textarea
-                                    className="w-full p-4 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none transition-all resize-none shadow-sm"
+                                    className="w-full p-4 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none transition-all resize-none shadow-sm font-medium text-black placeholder-slate-500"
                                     rows="3"
                                     value={selectedCard.reason}
                                     onChange={e => updateField('reason', e.target.value)}
@@ -653,11 +898,11 @@ const FiveSPage = () => {
                             </div>
 
                             <div className="md:col-span-2 space-y-2">
-                                <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                                    <CheckCircle size={16} className="text-emerald-500" /> Acción Propuesta
+                                <label className="text-sm font-bold text-black flex items-center gap-2">
+                                    <CheckCircle size={16} className="text-emerald-600" /> Acción Propuesta
                                 </label>
                                 <textarea
-                                    className="w-full p-4 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none transition-all resize-none shadow-sm"
+                                    className="w-full p-4 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none transition-all resize-none shadow-sm font-medium text-black placeholder-slate-500"
                                     rows="2"
                                     value={selectedCard.proposedAction}
                                     onChange={e => updateField('proposedAction', e.target.value)}
@@ -668,11 +913,11 @@ const FiveSPage = () => {
                             <hr className="md:col-span-2 border-slate-100 my-2" />
 
                             <div className="space-y-2">
-                                <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                                    <User size={16} className="text-slate-400" /> Responsable Asignado
+                                <label className="text-sm font-bold text-black flex items-center gap-2">
+                                    <User size={16} className="text-slate-600" /> Responsable Asignado
                                 </label>
                                 <select
-                                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none transition-all shadow-sm"
+                                    className="w-full p-3 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none transition-all shadow-sm text-black font-medium"
                                     value={selectedCard.responsible}
                                     onChange={e => updateField('responsible', e.target.value)}
                                 >
@@ -692,11 +937,11 @@ const FiveSPage = () => {
                             </div>
 
                             <div className="space-y-2">
-                                <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                                    <Activity size={16} className="text-slate-400" /> Estado
+                                <label className="text-sm font-bold text-black flex items-center gap-2">
+                                    <Activity size={16} className="text-slate-600" /> Estado
                                 </label>
                                 <select
-                                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none transition-all font-medium shadow-sm"
+                                    className="w-full p-3 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none transition-all font-medium shadow-sm text-black cursor-pointer"
                                     value={selectedCard.status}
                                     onChange={e => {
                                         const val = e.target.value;
@@ -713,132 +958,209 @@ const FiveSPage = () => {
                             </div>
 
                             <div className="space-y-2">
-                                <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                                    <Clock size={16} className="text-slate-400" /> Fecha Propuesta
+                                <label className="text-sm font-bold text-black flex items-center gap-2">
+                                    <Clock size={16} className="text-slate-600" /> Fecha Propuesta
                                 </label>
                                 <input
                                     type="date"
-                                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none transition-all shadow-sm"
-                                    value={selectedCard.targetDate}
+                                    className="w-full p-3 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none transition-all shadow-sm text-black font-medium"
+                                    value={selectedCard.targetDate || ''}
                                     onChange={e => updateField('targetDate', e.target.value)}
                                 />
                             </div>
 
-                            <div className="space-y-2">
-                                <label className={`flex items-center gap-2 text-sm font-semibold ${selectedCard.status === 'Cerrado' ? 'text-emerald-700' : 'text-slate-400'}`}>
-                                    <CheckCircle size={16} /> Fecha Solución
-                                </label>
-                                <input
-                                    type="date"
-                                    className="w-full p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none transition-all disabled:opacity-50 disabled:bg-slate-100 disabled:border-slate-200 disabled:cursor-not-allowed shadow-sm"
-                                    value={selectedCard.solutionDate}
-                                    onChange={e => updateField('solutionDate', e.target.value)}
-                                    disabled={selectedCard.status !== 'Cerrado'}
-                                />
-                            </div>
+                        </div>
 
-                            {/* Sección de Imágenes */}
-                            <div className="md:col-span-2 mt-4 bg-slate-50 p-6 rounded-xl border border-slate-100">
-                                <label className="block text-sm font-bold text-slate-700 mb-4 flex items-center gap-2">
-                                    <Camera size={18} className="text-brand-500" /> Evidencia Fotográfica
-                                </label>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                                    {/* Antes */}
-                                    <div className="space-y-2">
-                                        <div className="flex items-center justify-between">
-                                            <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">1. El Problema (Antes)</span>
-                                            {selectedCard.imageBefore && <span className="text-xs text-emerald-600 font-bold flex items-center gap-1"><CheckCircle size={12} /> Cargada</span>}
+                        <div className="space-y-2">
+                            <label className={`text-sm font-bold flex items-center gap-2 ${selectedCard.status === 'Cerrado' ? 'text-emerald-700' : 'text-slate-500'}`}>
+                                <CheckCircle size={16} /> Fecha Solución
+                            </label>
+                            <input
+                                type="date"
+                                className="w-full p-3 bg-emerald-50 border border-emerald-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none transition-all disabled:opacity-50 disabled:bg-slate-100 disabled:border-slate-300 disabled:cursor-not-allowed shadow-sm text-black font-medium"
+                                value={selectedCard.solutionDate}
+                                onChange={e => updateField('solutionDate', e.target.value)}
+                                disabled={selectedCard.status !== 'Cerrado'}
+                            />
+                        </div>
+
+                        {/* Sección de Imágenes */}
+                        <div className="md:col-span-2 mt-4 bg-slate-50 p-6 rounded-xl border border-slate-100">
+                            <label className="block text-sm font-bold text-slate-700 mb-4 flex items-center gap-2">
+                                <Camera size={18} className="text-brand-500" /> Evidencia Fotográfica
+                            </label>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                                {/* Antes */}
+                                <div className="space-y-2">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">1. El Problema (Antes)</span>
+                                        {selectedCard.imageBefore && <span className="text-xs text-emerald-600 font-bold flex items-center gap-1"><CheckCircle size={12} /> Cargada</span>}
+                                    </div>
+                                    <div className="h-48 bg-white rounded-xl border-2 border-dashed border-slate-300 overflow-hidden hover:border-brand-400 transition-colors group relative">
+                                        {/* Mobile Camera First approach */}
+                                        <div className="block md:hidden h-full">
+                                            <CameraCapture
+                                                currentImage={selectedCard.imageBefore}
+                                                onCapture={(file, url) => handleFileSelect('imageBefore', file, url)}
+                                                label="Tomar Foto (Antes)"
+                                            />
                                         </div>
-                                        <div className="h-48 bg-white rounded-xl border-2 border-dashed border-slate-300 overflow-hidden hover:border-brand-400 transition-colors group relative">
-                                            {/* Mobile Camera First approach */}
-                                            <div className="block md:hidden h-full">
-                                                <CameraCapture
-                                                    currentImage={selectedCard.imageBefore}
-                                                    onCapture={(url) => updateField('imageBefore', url)}
-                                                    label="Tomar Foto (Antes)"
-                                                />
-                                            </div>
-                                            {/* Desktop existing component */}
-                                            <div className="hidden md:block h-full">
-                                                <ImageUpload
-                                                    currentImage={selectedCard.imageBefore}
-                                                    onUpload={(url) => updateField('imageBefore', url)}
-                                                    placeholderText="Subir foto del hallazgo"
-                                                />
-                                            </div>
+                                        {/* Desktop existing component */}
+                                        <div className="hidden md:block h-full">
+                                            <ImageUpload
+                                                currentImage={selectedCard.imageBefore}
+                                                onFileSelect={(file, url) => handleFileSelect('imageBefore', file, url)}
+                                                placeholderText="Subir foto del hallazgo"
+                                            />
                                         </div>
                                     </div>
+                                </div>
 
-                                    {/* Después */}
-                                    <div className="space-y-2">
-                                        <div className="flex items-center justify-between">
-                                            <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">2. La Solución (Después)</span>
-                                            {selectedCard.imageAfter && <span className="text-xs text-emerald-600 font-bold flex items-center gap-1"><CheckCircle size={12} /> Cargada</span>}
+                                {/* Después */}
+                                <div className="space-y-2">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">2. La Solución (Después)</span>
+                                        {selectedCard.imageAfter && <span className="text-xs text-emerald-600 font-bold flex items-center gap-1"><CheckCircle size={12} /> Cargada</span>}
+                                    </div>
+                                    <div className="h-48 bg-white rounded-xl border-2 border-dashed border-slate-300 overflow-hidden hover:border-brand-400 transition-colors group relative">
+                                        {/* Mobile Camera First approach */}
+                                        <div className="block md:hidden h-full">
+                                            <CameraCapture
+                                                currentImage={selectedCard.imageAfter}
+                                                onCapture={(file, url) => handleFileSelect('imageAfter', file, url)}
+                                                label="Tomar Foto (Después)"
+                                            />
                                         </div>
-                                        <div className="h-48 bg-white rounded-xl border-2 border-dashed border-slate-300 overflow-hidden hover:border-brand-400 transition-colors group relative">
-                                            {/* Mobile Camera First approach */}
-                                            <div className="block md:hidden h-full">
-                                                <CameraCapture
-                                                    currentImage={selectedCard.imageAfter}
-                                                    onCapture={(url) => updateField('imageAfter', url)}
-                                                    label="Tomar Foto (Después)"
-                                                />
-                                            </div>
-                                            {/* Desktop existing component */}
-                                            <div className="hidden md:block h-full">
-                                                <ImageUpload
-                                                    currentImage={selectedCard.imageAfter}
-                                                    onUpload={(url) => updateField('imageAfter', url)}
-                                                    placeholderText="Subir foto de la mejora"
-                                                />
-                                            </div>
+                                        {/* Desktop existing component */}
+                                        <div className="hidden md:block h-full">
+                                            <ImageUpload
+                                                currentImage={selectedCard.imageAfter}
+                                                onFileSelect={(file, url) => handleFileSelect('imageAfter', file, url)}
+                                                placeholderText="Subir foto de la mejora"
+                                            />
                                         </div>
                                     </div>
                                 </div>
                             </div>
-
                         </div>
 
-                        {/* Modal Footer */}
-                        <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-between gap-3 sticky bottom-0 z-10 rounded-b-2xl">
-                            {selectedCard.id ? (
-                                <button
-                                    onClick={handleDeleteCard}
-                                    className="px-6 py-2.5 bg-red-50 text-red-600 font-medium rounded-xl border border-red-100 hover:bg-red-100 transition-all shadow-sm active:scale-95 flex items-center gap-2"
-                                >
-                                    <Trash2 size={18} />
-                                    <span>Eliminar</span>
-                                </button>
-                            ) : <div></div>}
+                    </div>
 
-                            <div className="flex gap-3 ml-auto">
-                                <button
-                                    onClick={handleCloseModal}
-                                    className="px-6 py-2.5 bg-white text-slate-700 font-medium rounded-xl border border-slate-200 hover:bg-slate-50 hover:text-slate-900 transition-all shadow-sm active:scale-95"
-                                >
-                                    Cancelar
-                                </button>
-                                <button
-                                    className="px-6 py-2.5 bg-gradient-to-r from-brand-600 to-cyan-600 text-white font-medium rounded-xl hover:from-brand-700 hover:to-cyan-700 transition-all shadow-lg shadow-brand-500/30 active:scale-95 flex items-center gap-2"
-                                    onClick={handleSaveCard}
-                                >
-                                    <Save size={18} />
-                                    <span>Guardar Tarjeta</span>
-                                </button>
-                            </div>
+                    {/* Modal Footer - Static and integrated */}
+                    <div className="p-6 bg-gray-50 border-t border-gray-200 mt-0 rounded-b-2xl flex flex-col sm:flex-row justify-between items-center gap-4">
+                        {selectedCard.id ? (
+                            <button
+                                onClick={handleDeleteCard}
+                                className="w-full sm:w-auto px-6 py-3 bg-white text-red-600 font-bold rounded-lg border-2 border-red-100 hover:bg-red-50 hover:border-red-200 transition-all shadow-sm active:scale-95 flex items-center justify-center gap-2"
+                            >
+                                <Trash2 size={20} />
+                                <span>Eliminar Tarjeta</span>
+                            </button>
+                        ) : <div className="hidden sm:block"></div>}
+
+                        <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+                            <button
+                                onClick={handleCloseModal}
+                                className="w-full sm:w-auto px-8 py-3 bg-white text-slate-700 font-bold rounded-lg border-2 border-slate-200 hover:bg-slate-50 hover:text-black transition-all shadow-sm active:scale-95"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                className="w-full sm:w-auto px-8 py-3 bg-brand-600 text-white font-bold rounded-lg border-2 border-transparent hover:bg-brand-700 transition-all shadow-md active:scale-95 flex items-center justify-center gap-2"
+                                onClick={handleSaveCard}
+                            >
+                                <Save size={20} />
+                                <span>Guardar Cambios</span>
+                            </button>
                         </div>
                     </div>
                 </div>
-            )
-            }
-            {selectedCard && selectedCard.id === null && (
-                // Only show FAB if NOT in modal (modal covers it, but logic check is good)
-                // Actually this logic is reversed, we want FAB when NO modal is open
-                null
             )}
+
             {!selectedCard && (
                 <MobileFab icon={Camera} onClick={handleNewCard} label="Nueva Tarjeta 5S" />
             )}
+
+            {showHistory && (
+                <AuditHistoryModal onClose={() => setShowHistory(false)} />
+            )}
+
+        </div>
+    );
+};
+
+// Componente para ver historial
+const AuditHistoryModal = ({ onClose }) => {
+    const [logs, setLogs] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const loadLogs = async () => {
+            const data = await AuditService.getLogs('5S_CARD', 50);
+            setLogs(data);
+            setLoading(false);
+        };
+        loadLogs();
+    }, []);
+
+    return (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={onClose}>
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                <div className="p-4 border-b border-slate-100 flex justify-between items-center">
+                    <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                        <Clock size={20} className="text-slate-500" />
+                        Historial de Cambios
+                    </h3>
+                    <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full text-slate-500">
+                        <X size={20} />
+                    </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                    {loading ? (
+                        <div className="text-center py-10 text-slate-400">Cargando historial...</div>
+                    ) : logs.length === 0 ? (
+                        <div className="text-center py-10 text-slate-400">No hay registros de cambios recientes.</div>
+                    ) : (
+                        logs.map(log => (
+                            <div key={log.id} className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-sm">
+                                <div className="flex justify-between items-start mb-1">
+                                    <span className={`font-bold text-xs px-2 py-0.5 rounded ${log.action === 'DELETE' ? 'bg-red-100 text-red-700' :
+                                        log.action === 'CREATE' ? 'bg-green-100 text-green-700' :
+                                            'bg-blue-100 text-blue-700'
+                                        }`}>
+                                        {log.action === 'DELETE' ? 'ELIMINADO' : log.action === 'CREATE' ? 'CREADO' : 'MODIFICADO'}
+                                    </span>
+                                    <span className="text-slate-400 text-xs">
+                                        {new Date(log.created_at).toLocaleString()}
+                                    </span>
+                                </div>
+                                <div className="text-slate-600">
+                                    {log.user_email && <div className="text-xs text-slate-400 mb-1">Por: {log.user_email}</div>}
+                                    {log.action === 'DELETE' && log.details?.deletedData && (
+                                        <div className="mt-1 p-2 bg-white rounded border border-slate-100">
+                                            <div><strong>Ubicación:</strong> {log.details.deletedData.location}</div>
+                                            <div><strong>Razón:</strong> {log.details.deletedData.reason}</div>
+                                            <div><strong>Responsable:</strong> {log.details.deletedData.responsible}</div>
+                                        </div>
+                                    )}
+                                    {log.action === 'UPDATE' && (
+                                        <div className="text-xs text-slate-500 mt-1">
+                                            Tarjeta ID: {log.entity_id} actualizada.
+                                        </div>
+                                    )}
+                                    {log.action === 'CREATE' && (
+                                        <div className="text-xs text-slate-500 mt-1">
+                                            Nueva tarjeta creada.
+                                            {log.details?.initialData?.location && <span> ({log.details.initialData.location})</span>}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        ))
+                    )}
+                </div>
+            </div>
         </div>
     );
 };

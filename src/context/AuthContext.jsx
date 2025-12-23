@@ -162,7 +162,7 @@ export const AuthProvider = ({ children }) => {
                 console.warn("AuthContext: Forced loading to false due to timeout.");
                 setLoading(false);
             }
-        }, 3000);
+        }, 6000);
 
         const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
             console.log("AuthContext: Auth state change:", event);
@@ -227,7 +227,7 @@ export const AuthProvider = ({ children }) => {
 
         // Timeout for the main profile fetch
         const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Request timed out')), 8000)
+            setTimeout(() => reject(new Error('Request timed out')), 15000)
         );
 
         let profileData = null;
@@ -341,12 +341,26 @@ export const AuthProvider = ({ children }) => {
         return { success: true, message: 'Se ha enviado un correo de recuperación.' };
     };
 
+    const updatePassword = async (newPassword) => {
+        const { error } = await supabase.auth.updateUser({ password: newPassword });
+        if (error) return { success: false, message: error.message };
+        return { success: true, message: 'Contraseña actualizada correctamente' };
+    };
+
     // Admin functions
     const adminAuthorizeUser = async (userId) => {
         const { error } = await supabase
             .from('profiles')
             .update({ is_authorized: true })
             .eq('id', userId);
+    };
+
+    const updateUserStatus = async (userId, status) => {
+        const { error } = await supabase
+            .from('profiles')
+            .update({ is_authorized: status })
+            .eq('id', userId);
+        return { success: !error, error };
     };
 
     const addCompany = async (name, domain) => {
@@ -389,7 +403,8 @@ export const AuthProvider = ({ children }) => {
     };
 
     const removeUser = async (userId) => {
-        await supabase.from('profiles').delete().eq('id', userId);
+        const { error } = await supabase.from('profiles').delete().eq('id', userId);
+        return { success: !error, error };
     };
 
     const updateUserCompany = async (userId, companyId) => {
@@ -426,8 +441,10 @@ export const AuthProvider = ({ children }) => {
             companyUsers,
             globalFilterCompanyId,
             setGlobalFilterCompanyId,
+            updateUserStatus,
             refreshData,
-            repairAdminProfile
+            repairAdminProfile,
+            updatePassword
         }}>
             {!loading && children}
         </AuthContext.Provider>
