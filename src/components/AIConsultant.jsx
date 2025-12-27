@@ -15,10 +15,8 @@ import {
     CheckCircle,
     AlertCircle,
     Info,
-    Zap,
     MessageSquare,
-    Send,
-    User
+    Send
 } from 'lucide-react';
 import { prepareCompanyData, generateAIInsight, sendChatMessage, shouldGenerateNewInsight } from '../services/geminiService';
 
@@ -52,6 +50,7 @@ const AIConsultant = ({ data, companyName, apiKey, fullScreen = false }) => {
                 console.error('Error parsing cached insight:', e);
             }
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [companyName]);
 
     // Auto-scroll chat
@@ -305,7 +304,7 @@ const AIConsultant = ({ data, companyName, apiKey, fullScreen = false }) => {
                             {/* Executive Summary */}
                             <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
                                 <p className="text-slate-700 text-sm leading-relaxed italic">
-                                    "{insight.resumenEjecutivo}"
+                                    &quot;{insight.resumenEjecutivo}&quot;
                                 </p>
                             </div>
 

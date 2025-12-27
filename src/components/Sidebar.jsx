@@ -11,26 +11,26 @@ const Sidebar = ({ isOpen, onClose }) => {
     const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
 
     useEffect(() => {
+        const fetchAvatar = async () => {
+            try {
+                const { data } = await supabase
+                    .from('profiles')
+                    .select('avatar_url')
+                    .eq('id', user.id)
+                    .maybeSingle();
+
+                if (data && data.avatar_url) {
+                    setAvatarUrl(data.avatar_url);
+                }
+            } catch (error) {
+                console.error('Error fetching avatar:', error);
+            }
+        };
+
         if (user) {
             fetchAvatar();
         }
     }, [user]);
-
-    const fetchAvatar = async () => {
-        try {
-            const { data, error } = await supabase
-                .from('profiles')
-                .select('avatar_url')
-                .eq('id', user.id)
-                .maybeSingle();
-
-            if (data && data.avatar_url) {
-                setAvatarUrl(data.avatar_url);
-            }
-        } catch (error) {
-            console.error('Error fetching avatar:', error);
-        }
-    };
 
     const handleAvatarUpdate = async (url) => {
         try {
@@ -50,7 +50,6 @@ const Sidebar = ({ isOpen, onClose }) => {
 
     const navItems = [
         { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
-        { icon: Brain, label: 'Consultor IA', path: '/consultant' },
         { icon: ClipboardList, label: 'Tarjetas 5S', path: '/5s' },
         { icon: ShieldCheck, label: 'Auditoría 5S', path: '/auditorias-5s' },
         { icon: FileText, label: 'Proyectos A3', path: '/a3' },
@@ -58,6 +57,11 @@ const Sidebar = ({ isOpen, onClose }) => {
         { icon: Zap, label: 'Quick Wins', path: '/quick-wins' },
         { icon: Users, label: 'Responsables', path: '/responsables' },
     ];
+
+    if (user && (user.role === 'admin' || user.has_ai_access)) {
+        // Insert Consultant after Dashboard
+        navItems.splice(1, 0, { icon: Brain, label: 'Consultor IA', path: '/consultant' });
+    }
 
     if (user && user.role === 'admin') {
         navItems.push({ icon: Settings, label: 'Administración', path: '/admin' });
@@ -160,7 +164,10 @@ const Sidebar = ({ isOpen, onClose }) => {
                     </div>
 
                     <button
-                        onClick={logout}
+                        onClick={async () => {
+                            await logout();
+                            window.location.href = '/login'; // Force full redirect for Electron compatibility
+                        }}
                         className="mt-2 w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium text-slate-400 hover:text-white hover:bg-red-500/10 hover:border-red-500/20 border border-transparent rounded-lg transition-all duration-200"
                     >
                         <LogOut size={14} />

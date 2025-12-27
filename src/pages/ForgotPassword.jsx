@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useNavigate, Link } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { Mail, ArrowRight, ArrowLeft, Loader2 } from 'lucide-react';
 
 const ForgotPasswordPage = () => {
@@ -9,7 +9,7 @@ const ForgotPasswordPage = () => {
     const [message, setMessage] = useState('');
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
-    const navigate = useNavigate();
+
 
     const handleSubmit = async (e) => {
         e.preventDefault();

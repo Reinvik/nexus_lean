@@ -6,7 +6,7 @@ import { offlineService } from '../services/offlineService';
 const DataContext = createContext();
 
 export const DataProvider = ({ children }) => {
-    const { user, globalFilterCompanyId } = useAuth();
+    const { user } = useAuth();
 
     // 5S Cards State
     const [fiveSCards, setFiveSCards] = useState([]);
@@ -76,7 +76,7 @@ export const DataProvider = ({ children }) => {
 
             const { data, error } = await supabase
                 .from('five_s_cards')
-                .select('id, date, location, article, reporter, reason, proposed_action, responsible, target_date, solution_date, status, type, image_before, image_after, company_id, created_at')
+                .select('id, date, location, article, reporter, reason, proposed_action, responsible, target_date, solution_date, status, type, image_before, image_after, company_id, created_at, card_number')
                 .order('created_at', { ascending: false })
                 .abortSignal(controller.signal);
 
@@ -102,6 +102,8 @@ export const DataProvider = ({ children }) => {
                     imageBefore: c.image_before,
                     imageAfter: c.image_after,
                     companyId: c.company_id,
+                    // Use persistent card_number from DB, fallback to '?' if missing
+                    cardNumber: c.card_number || '?',
                     isOffline: false,
                     createdAt: c.created_at
                 }));
@@ -114,16 +116,12 @@ export const DataProvider = ({ children }) => {
                     return dateB - dateA;
                 });
 
-                const finalCards = combinedData.map((c, i) => ({
-                    ...c,
-                    cardNumber: c.isOffline ? 'OFF' : (combinedData.length - i)
-                }));
-
-                setFiveSCards(finalCards);
+                // Do NOT overwrite cardNumber with index anymore
+                setFiveSCards(combinedData);
             }
         } catch (error) {
-            if (error.name === 'AbortError') {
-                return;
+            if (error.name === 'AbortError' || error.message?.includes('aborted')) {
+                return; // Ignore abort errors
             }
             console.error('DataContext: Error fetching online 5S cards:', error.message);
         } finally {
@@ -192,13 +190,10 @@ export const DataProvider = ({ children }) => {
         }
     }, [user]);
 
-    // Prefetch on user login
+    // Prefetch REMOVED to improve login performance
+    // Pages will request data when needed.
     useEffect(() => {
-        if (user) {
-            console.log("DataContext: User detected, prefetching all data...");
-            fetchFiveSCards();
-            fetchResponsablesData();
-        } else {
+        if (!user) {
             setFiveSCards([]);
             setQuickWinsData([]);
             setVsmData([]);
@@ -206,7 +201,7 @@ export const DataProvider = ({ children }) => {
             setLoadingFiveS(false);
             setLoadingResponsables(false);
         }
-    }, [user, fetchFiveSCards, fetchResponsablesData]);
+    }, [user]);
 
     // Optimistic update helpers for 5S
     const updateFiveSCard = useCallback((cardId, updatedData) => {

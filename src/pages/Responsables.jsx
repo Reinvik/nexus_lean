@@ -1,17 +1,25 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../supabaseClient';
+// supabase used via DataContext
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import HeaderWithFilter from '../components/HeaderWithFilter';
-import { sendTaskReminder } from '../services/emailService';
-import { User, CheckCircle, Clock, AlertCircle, TrendingUp, Award, List, ChevronRight, Briefcase, Activity, Mail, Loader2 } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+// sendTaskReminder available if needed
+import { User, CheckCircle, AlertCircle, TrendingUp, Award, List, Briefcase, Activity, Mail, Loader2, Brain, ShieldCheck } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 const ResponsablesPage = () => {
-    const { user, companyUsers, globalFilterCompanyId } = useAuth();
-    const { fiveSCards, quickWinsData, vsmData, a3Data, loadingResponsables: loading, fetchResponsablesData, fetchFiveSCards } = useData();
+    const { user, companyUsers, globalFilterCompanyId, adminAuthorizeUser, toggleAIAccess } = useAuth();
+    const { fiveSCards, quickWinsData, vsmData, a3Data, loadingResponsables: _loading, fetchResponsablesData, fetchFiveSCards } = useData();
     const navigate = useNavigate();
+
+    // Fetch Data on Enter
+    useEffect(() => {
+        if (user) {
+            fetchResponsablesData();
+            fetchFiveSCards(); // Also need 5S for tasks
+        }
+    }, [user, fetchResponsablesData, fetchFiveSCards]);
     const [selectedResponsible, setSelectedResponsible] = useState(null);
     const [taskFilter, setTaskFilter] = useState('all'); // 'all', 'completed', 'in_progress', 'pending'
     const [sendingEmail, setSendingEmail] = useState(false);
@@ -29,7 +37,7 @@ const ResponsablesPage = () => {
     })), [fiveSCards]);
 
     // Filter Helper: checks if an item belongs to the currently viewed company context
-    const isVisible = (item) => {
+    const isVisible = useCallback((item) => {
         if (!user) return false;
 
         // ALWAYS show tasks assigned to the current user (My Tasks view), 
@@ -41,7 +49,7 @@ const ResponsablesPage = () => {
 
         if (targetCompanyId === 'all') return true;
         return item.companyId === targetCompanyId;
-    };
+    }, [user, globalFilterCompanyId]);
 
     // 1. Get List of Unique Responsibles (from Users list OR from Data items)
     // Preference: Use `companyUsers` as the master list of "People", 
@@ -76,7 +84,7 @@ const ResponsablesPage = () => {
         });
 
         return Array.from(names).sort();
-    }, [companyUsers, fiveSData, quickWinsData, vsmData, a3Data, user, globalFilterCompanyId]);
+    }, [companyUsers, fiveSData, quickWinsData, vsmData, a3Data, user, globalFilterCompanyId, isVisible]);
 
     // 2. Aggregate Tasks per Responsible
     const responsibleStats = useMemo(() => {
@@ -143,7 +151,7 @@ const ResponsablesPage = () => {
                 }
             };
         }).sort((a, b) => b.totalPending - a.totalPending); // Sort by busiest
-    }, [uniqueResponsibles, fiveSData, quickWinsData, vsmData, a3Data, user, globalFilterCompanyId]);
+    }, [uniqueResponsibles, fiveSData, quickWinsData, vsmData, a3Data, isVisible]);
 
     // Helper to determine normalized status for filtering
     const getNormalizedStatus = (task, type) => {
@@ -288,48 +296,49 @@ const ResponsablesPage = () => {
                                     </h2>
                                     <p className="text-gray-500 mt-1 ml-14">Detalle de asignaciones</p>
                                 </div>
-                                <div className="flex items-center gap-3">
-                                    <button
-                                        disabled={sendingEmail}
-                                        onClick={async () => {
-                                            setSendingEmail(true);
-                                            try {
-                                                // 1. Find User Email
-                                                let userEmail = '';
-                                                if (companyUsers) {
-                                                    const u = companyUsers.find(user => user.name === selectedResponsible.name);
-                                                    if (u && u.email) userEmail = u.email;
-                                                }
+                                <div className="flex flex-col items-end gap-2">
+                                    <div className="flex items-center gap-3">
+                                        <button
+                                            disabled={sendingEmail}
+                                            onClick={async () => {
+                                                setSendingEmail(true);
+                                                try {
+                                                    // 1. Find User Email
+                                                    let userEmail = '';
+                                                    if (companyUsers) {
+                                                        const u = companyUsers.find(user => user.name === selectedResponsible.name);
+                                                        if (u && u.email) userEmail = u.email;
+                                                    }
 
-                                                if (!userEmail) {
-                                                    alert('No se encontró el correo electrónico para este usuario.');
-                                                    setSendingEmail(false);
-                                                    return;
-                                                }
+                                                    if (!userEmail) {
+                                                        alert('No se encontró el correo electrónico para este usuario.');
+                                                        setSendingEmail(false);
+                                                        return;
+                                                    }
 
-                                                // 2. [DEMO MODE] Send via Local Outlook (Mailto) directly
+                                                    // 2. [DEMO MODE] Send via Local Outlook (Mailto) directly
 
-                                                // FLATTEN TASKS from the structured object
-                                                const allTasks = [
-                                                    ...(selectedResponsible.tasks.fiveS || []).map(t => ({ ...t, type: '5S', title: `${t.article || 'Artículo'}, ${t.reason} en ${t.location || 'Area'}` })),
-                                                    ...(selectedResponsible.tasks.quickWins || []).map(t => ({ ...t, type: 'QW', title: `${t.title}` })),
-                                                    ...(selectedResponsible.tasks.vsm || []).map(t => ({ ...t, type: 'VSM', title: `${t.name}` })),
-                                                    ...(selectedResponsible.tasks.a3 || []).map(t => ({ ...t, type: 'A3', title: `Proyecto: ${t.title}` })),
-                                                    ...(selectedResponsible.tasks.a3Actions || []).map(t => ({ ...t, type: 'A3', title: `Acción: ${t.what} (${t.projectTitle})` }))
-                                                ];
+                                                    // FLATTEN TASKS from the structured object
+                                                    const allTasks = [
+                                                        ...(selectedResponsible.tasks.fiveS || []).map(t => ({ ...t, type: '5S', title: `${t.article || 'Artículo'}, ${t.reason} en ${t.location || 'Area'}` })),
+                                                        ...(selectedResponsible.tasks.quickWins || []).map(t => ({ ...t, type: 'QW', title: `${t.title}` })),
+                                                        ...(selectedResponsible.tasks.vsm || []).map(t => ({ ...t, type: 'VSM', title: `${t.name}` })),
+                                                        ...(selectedResponsible.tasks.a3 || []).map(t => ({ ...t, type: 'A3', title: `Proyecto: ${t.title}` })),
+                                                        ...(selectedResponsible.tasks.a3Actions || []).map(t => ({ ...t, type: 'A3', title: `Acción: ${t.what} (${t.projectTitle})` }))
+                                                    ];
 
-                                                // Filter for relevant tasks (Pending/In Progress for the list)
-                                                // Assuming we want to show everything or just pending? User asked for "avise las pendientes o en progreso"
-                                                const pendingTasks = allTasks.filter(t =>
-                                                    t.status !== 'Cerrado' && t.status !== 'done' && t.status !== 'completed'
-                                                );
+                                                    // Filter for relevant tasks (Pending/In Progress for the list)
+                                                    // Assuming we want to show everything or just pending? User asked for "avise las pendientes o en progreso"
+                                                    const pendingTasks = allTasks.filter(t =>
+                                                        t.status !== 'Cerrado' && t.status !== 'done' && t.status !== 'completed'
+                                                    );
 
-                                                const appLink = window.location.origin;
+                                                    const appLink = window.location.origin;
 
-                                                const subject = encodeURIComponent(`Reporte de Estado Nexus Be Lean`);
+                                                    const subject = encodeURIComponent(`Reporte de Estado Nexus Be Lean`);
 
-                                                // Clean format per user request
-                                                const body = encodeURIComponent(`Hola ${selectedResponsible.name},
+                                                    // Clean format per user request
+                                                    const body = encodeURIComponent(`Hola ${selectedResponsible.name},
 
 Aquí tienes el resumen ejecutivo de tu carga de trabajo actual.
 ✅ Tareas Completadas: ${selectedResponsible.totalCompleted}
@@ -348,26 +357,66 @@ ${appLink}
 Atentamente,
 Nexus Jarvis System | CIAL Alimentos`);
 
-                                                window.location.href = `mailto:${userEmail}?subject=${subject}&body=${body}`;
+                                                    window.location.href = `mailto:${userEmail}?subject=${subject}&body=${body}`;
 
-                                                setSendingEmail(false);
-                                                alert('Se ha abierto tu cliente de correo (Outlook) con el borrador generado.');
+                                                    setSendingEmail(false);
+                                                    alert('Se ha abierto tu cliente de correo (Outlook) con el borrador generado.');
 
-                                            } catch (error) {
-                                                console.error(error);
-                                                alert('Error inesperado al enviar correo.');
-                                            } finally {
-                                                setSendingEmail(false);
-                                            }
-                                        }}
-                                        className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 font-bold transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                        {sendingEmail ? <Loader2 size={16} className="animate-spin" /> : <Mail size={16} />}
-                                        {sendingEmail ? 'Enviando...' : 'Enviar Recordatorio'}
-                                    </button>
-                                    <button onClick={() => setSelectedResponsible(null)} className="text-gray-400 hover:text-gray-600 text-sm underline">
-                                        Volver al resumen
-                                    </button>
+                                                } catch (error) {
+                                                    console.error(error);
+                                                    alert('Error inesperado al enviar correo.');
+                                                } finally {
+                                                    setSendingEmail(false);
+                                                }
+                                            }}
+                                            className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 font-bold transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            {sendingEmail ? <Loader2 size={16} className="animate-spin" /> : <Mail size={16} />}
+                                            {sendingEmail ? 'Enviando...' : 'Enviar Recordatorio'}
+                                        </button>
+                                        <button onClick={() => setSelectedResponsible(null)} className="text-gray-400 hover:text-gray-600 text-sm underline">
+                                            Volver al resumen
+                                        </button>
+                                    </div>
+
+                                    {/* AI Access Toggle */}
+                                    {user?.role === 'admin' && (() => {
+                                        // Retrieve the actual user object from companyUsers to check properties
+                                        const actualUser = companyUsers?.find(u => u.name === selectedResponsible.name);
+                                        // Only show if we found the user and they have an ID (not just a name from a card)
+                                        if (actualUser && actualUser.id) {
+                                            return (
+                                                <div className="flex items-center justify-between p-2 bg-slate-50 rounded-lg border border-violet-100 min-w-[200px]">
+                                                    <div className="flex items-center gap-2">
+                                                        <Brain className="text-violet-600" size={14} />
+                                                        <span className="text-xs font-medium text-slate-600">Acceso IA</span>
+                                                    </div>
+                                                    <label className="relative inline-flex items-center cursor-pointer">
+                                                        <input
+                                                            type="checkbox"
+                                                            className="sr-only peer"
+                                                            checked={actualUser.has_ai_access || false}
+                                                            onChange={async (e) => {
+                                                                const newStatus = e.target.checked;
+                                                                if (confirm(`¿${newStatus ? 'Dar' : 'Quitar'} acceso a Consultor IA a ${selectedResponsible.name}?`)) {
+                                                                    const { success } = await toggleAIAccess(actualUser.id, newStatus);
+                                                                    if (success) {
+                                                                        // Force local update if needed, though context usually handles it
+                                                                        // You might need a way to refresh companyUsers or update local state
+                                                                        alert("Permisos actualizados.");
+                                                                    } else {
+                                                                        alert("Error al actualizar permisos.");
+                                                                    }
+                                                                }
+                                                            }}
+                                                        />
+                                                        <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-violet-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-violet-500"></div>
+                                                    </label>
+                                                </div>
+                                            );
+                                        }
+                                        return null;
+                                    })()}
                                 </div>
                             </div>
 

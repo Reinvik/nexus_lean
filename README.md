@@ -248,6 +248,42 @@ Panel exclusivo para administradores.
 
 ---
 
+## 📸 Galería de Capturas <a name="capturas"></a>
+
+<div align="center">
+
+<h3>Dashboard Ejecutivo</h3>
+<p>Visión integral de KPIs, cumplimiento de 5S y estado de proyectos.</p>
+<img src="assets/screenshots/01_dashboard.png" alt="Dashboard Principal" width="100%" style="border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
+
+<br><br>
+
+<h3>Gestión Visual de Hallazgos (5S)</h3>
+<p>Tableros Kanban interactivos para el seguimiento de tarjetas rojas y amarillas.</p>
+<img src="assets/screenshots/02_cards.png" alt="Tarjetas 5S" width="100%" style="border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
+
+<br><br>
+
+<h3>Indicadores de Gestión</h3>
+<p>Análisis detallado de anomalías, distribución por estado y áreas críticas.</p>
+<img src="assets/screenshots/03_analytics.png" alt="Analíticas y KPIs" width="100%" style="border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
+
+<br><br>
+
+<h3>Auditorías 5S Digitales</h3>
+<p>Resultados inmediatos con gráficos de radar y comparativas por área.</p>
+<img src="assets/screenshots/04_audit.png" alt="Auditoría 5S" width="100%" style="border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
+
+<br><br>
+
+<h3>Proyectos A3 y VSM</h3>
+<p>Herramientas avanzadas de resolución de problemas (Ishikawa) y mapeo de valor.</p>
+<img src="assets/screenshots/05_a3_vsm.png" alt="Proyectos A3 e Ishikawa" width="100%" style="border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
+
+</div>
+
+---
+
 ## 💻 Tecnologías
 
 | Categoría | Tecnología | Versión |

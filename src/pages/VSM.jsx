@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../context/AuthContext';
 import HeaderWithFilter from '../components/HeaderWithFilter';
-import { Plus, Search, Filter, Activity, X, Calendar, User, FileText, ArrowRight, Clock, Target, Trash2, CheckCircle } from 'lucide-react';
+import { Plus, Search, Activity, X, Calendar, User, FileText, ArrowRight, Clock, Target, Trash2, CheckCircle } from 'lucide-react';
 import ImageUpload from '../components/ImageUpload';
 
 const VSMPage = () => {
@@ -14,7 +14,7 @@ const VSMPage = () => {
 
     // Datos Iniciales
     const [vsms, setVsms] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const [_loading, setLoading] = useState(true);
 
     const fetchVsms = async () => {
         try {
@@ -183,7 +183,7 @@ const VSMPage = () => {
         }
     };
 
-    const handleImageUpload = (e) => {
+    const _handleImageUpload = (e) => {
         const file = e.target.files[0];
         if (file) {
             const url = URL.createObjectURL(file);

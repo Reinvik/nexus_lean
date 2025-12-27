@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import { useState, useRef } from 'react';
 import { Camera, RefreshCw, Trash2 } from 'lucide-react';
 
 /**

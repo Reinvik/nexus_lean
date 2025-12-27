@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Plus, Trash2, Calendar, User, CheckCircle, Circle, AlertCircle } from 'lucide-react';
 
 const A3ActionPlan = ({ actions, onChange, users = [] }) => {
@@ -38,28 +38,28 @@ const A3ActionPlan = ({ actions, onChange, users = [] }) => {
                 </h5>
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
                     <div className="md:col-span-6">
-                        <label className="text-xs font-bold text-slate-400 mb-1 block uppercase tracking-wider">Actividad / Contramedida</label>
+                        <label className="text-xs font-bold text-slate-700 mb-1 block uppercase tracking-wider">Actividad / Contramedida</label>
                         <input
                             type="text"
                             placeholder="Descripción detallada de la acción a realizar..."
-                            className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm transition-all shadow-sm placeholder:text-slate-300"
+                            className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm transition-all shadow-sm placeholder:text-slate-400 text-slate-900"
                             value={newItem.activity}
                             onChange={e => setNewItem({ ...newItem, activity: e.target.value })}
                         />
                     </div>
                     <div className="md:col-span-3">
-                        <label className="text-xs font-bold text-slate-400 mb-1 block uppercase tracking-wider">Responsable</label>
+                        <label className="text-xs font-bold text-slate-700 mb-1 block uppercase tracking-wider">Responsable</label>
                         <div className="relative">
                             <User size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                             {users.length > 0 ? (
                                 <select
-                                    className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm appearance-none shadow-sm cursor-pointer"
+                                    className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm appearance-none shadow-sm cursor-pointer text-slate-900 font-medium"
                                     value={newItem.responsible}
                                     onChange={e => setNewItem({ ...newItem, responsible: e.target.value })}
                                 >
-                                    <option value="">Seleccionar...</option>
+                                    <option value="" className="text-slate-500">Seleccionar...</option>
                                     {users.map(u => (
-                                        <option key={u.uid || u.id || u.name} value={u.name}>{u.name}</option>
+                                        <option key={u.uid || u.id || u.name} value={u.name} className="text-slate-900">{u.name}</option>
                                     ))}
                                 </select>
                             ) : (
@@ -74,12 +74,12 @@ const A3ActionPlan = ({ actions, onChange, users = [] }) => {
                         </div>
                     </div>
                     <div className="md:col-span-2">
-                        <label className="text-xs font-bold text-slate-400 mb-1 block uppercase tracking-wider">Fecha Límite</label>
+                        <label className="text-xs font-bold text-slate-700 mb-1 block uppercase tracking-wider">Fecha Límite</label>
                         <div className="relative">
                             <Calendar size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                             <input
                                 type="date"
-                                className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm shadow-sm cursor-pointer"
+                                className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm shadow-sm cursor-pointer text-slate-900"
                                 value={newItem.date}
                                 onChange={e => setNewItem({ ...newItem, date: e.target.value })}
                             />

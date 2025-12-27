@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Save, Plus, Trash2, CheckCircle, WifiOff, ChevronDown, ChevronUp } from 'lucide-react';
 import { offlineService } from '../services/offlineService';

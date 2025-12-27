@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Plus, Trash2, Calendar, User, CheckCircle } from 'lucide-react';
+import { useState } from 'react';
+import { Plus, Trash2, CheckCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 const A3Countermeasures = ({ data, onChange }) => {
