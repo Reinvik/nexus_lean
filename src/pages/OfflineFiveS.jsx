@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { offlineService } from '../services/offlineService';
-import { ArrowLeft, Send, Save, CheckCircle, Camera, WifiOff } from 'lucide-react';
+import { ArrowLeft, Save, CheckCircle, WifiOff } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import ImageUpload from '../components/ImageUpload';
 

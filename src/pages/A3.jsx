@@ -3,13 +3,14 @@ import { useLocation } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../context/AuthContext';
 import HeaderWithFilter from '../components/HeaderWithFilter';
-import { Plus, Search, Filter, X, Save, FileText, BarChart2, GitBranch, Target, Layout, Calendar, User, ChevronRight, ArrowRight, CheckCircle, Clock, Trash2 } from 'lucide-react';
+import { Plus, Search, X, Save, FileText, BarChart2, GitBranch, Target, Layout, Calendar, User, Trash2, Image as ImageIcon } from 'lucide-react';
 
 // Import A3 Components
 import A3Ishikawa from '../components/a3/A3Ishikawa';
 import A3FiveWhys from '../components/a3/A3FiveWhys';
 import A3FollowUp from '../components/a3/A3FollowUp';
 import A3ActionPlan from '../components/a3/A3ActionPlan';
+import A3Pareto from '../components/a3/A3Pareto';
 
 
 const AutoResizeTextarea = ({ value, onChange, placeholder, minHeight = "100px", className }) => {
@@ -44,11 +45,11 @@ const A3Page = () => {
 
     // Load data from Supabase
     const [a3Projects, setA3Projects] = useState([]);
-    const [loading, setLoading] = useState(true);
+    // const [loading, setLoading] = useState(true);
 
     const fetchProjects = async () => {
         try {
-            setLoading(true);
+            // setLoading(true);
             const { data, error } = await supabase
                 .from('a3_projects')
                 .select('*')
@@ -64,9 +65,12 @@ const A3Page = () => {
                     date: p.date,
                     responsible: p.responsible,
                     background: p.background,
+                    backgroundImageUrl: p.background_image_url,
                     currentCondition: p.current_condition,
+                    currentConditionImageUrl: p.current_condition_image_url,
                     goal: p.goal,
                     rootCause: p.root_cause,
+                    paretoData: p.pareto_data || [],
                     countermeasures: p.countermeasures,
                     plan: p.execution_plan,       // Fixed column name
                     followUp: p.follow_up_notes,  // Fixed column name
@@ -84,7 +88,7 @@ const A3Page = () => {
         } catch (error) {
             console.error('Error fetching A3 projects:', error);
         } finally {
-            setLoading(false);
+            // setLoading(false);
         }
     };
 
@@ -133,14 +137,15 @@ const A3Page = () => {
             responsible: user ? user.name : '',
             date: new Date().toISOString().split('T')[0],
             background: '',
+            backgroundImageUrl: '',
             currentCondition: '',
+            currentConditionImageUrl: '',
             goal: '',
             rootCause: '',
+            paretoData: [],
             countermeasures: '',
             plan: '',
             followUp: '',
-            ishikawas: [],
-            multipleFiveWhys: [],
             ishikawas: [],
             multipleFiveWhys: [],
             followUpData: [],
@@ -175,9 +180,12 @@ const A3Page = () => {
             date: selectedA3.date,
             responsible: selectedA3.responsible,
             background: selectedA3.background,
+            background_image_url: selectedA3.backgroundImageUrl,
             current_condition: selectedA3.currentCondition,
+            current_condition_image_url: selectedA3.currentConditionImageUrl,
             goal: selectedA3.goal,
             root_cause: selectedA3.rootCause,
+            pareto_data: selectedA3.paretoData,
             countermeasures: selectedA3.countermeasures,
             execution_plan: selectedA3.plan,      // Mapped to DB column
             follow_up_notes: selectedA3.followUp, // Mapped to DB column
@@ -284,6 +292,36 @@ const A3Page = () => {
             ...prev,
             actionPlan: newPlan
         }));
+    };
+
+    // --- MANAGE IMAGE UPLOADS ---
+    const handleImageUpload = async (file, field) => {
+        if (!file) return;
+
+        try {
+            const fileExt = file.name.split('.').pop();
+            const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
+            const filePath = `${user.id}/${fileName}`; // Organized by user
+
+            const { error } = await supabase.storage
+                .from('images')
+                .upload(filePath, file);
+
+            if (error) throw error;
+
+            const { data: { publicUrl } } = supabase.storage
+                .from('images')
+                .getPublicUrl(filePath);
+
+            setSelectedA3(prev => ({
+                ...prev,
+                [field]: publicUrl
+            }));
+
+        } catch (error) {
+            console.error('Error uploading image:', error);
+            alert('Error al subir la imagen');
+        }
     };
 
 
@@ -456,7 +494,7 @@ const A3Page = () => {
                                         relative py-4 px-6 text-sm font-bold flex items-center gap-2 transition-all border-b-2
                                         ${activeTab === tab.id
                                             ? `text-${tab.color}-600 border-${tab.color}-600 bg-white rounded-t-lg shadow-sm -mb-[1px] z-10`
-                                            : 'text-slate-500 border-transparent hover:text-slate-800 hover:bg-slate-100/50 rounded-t-lg'
+                                            : 'text-slate-900 border-transparent hover:text-black hover:bg-slate-100/50 rounded-t-lg'
                                         }
                                     `}
                                 >
@@ -484,6 +522,30 @@ const A3Page = () => {
                                                 onChange={(e) => setSelectedA3({ ...selectedA3, background: e.target.value })}
                                                 minHeight="160px"
                                             />
+                                            {/* Image Upload Area */}
+                                            <div className="mt-3">
+                                                {selectedA3.backgroundImageUrl ? (
+                                                    <div className="relative group/img">
+                                                        <img src={selectedA3.backgroundImageUrl} alt="Antecedentes" className="w-full h-auto max-h-[300px] object-contain rounded-lg border border-slate-200" />
+                                                        <button
+                                                            onClick={() => setSelectedA3({ ...selectedA3, backgroundImageUrl: '' })}
+                                                            className="absolute top-2 right-2 bg-white/90 p-1.5 rounded-full text-red-500 opacity-0 group-hover/img:opacity-100 transition-opacity shadow-sm"
+                                                        >
+                                                            <Trash2 size={16} />
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <label className="flex items-center gap-2 text-sm text-brand-600 font-bold cursor-pointer hover:bg-brand-50 p-2 rounded-lg transition-colors w-fit">
+                                                        <ImageIcon size={16} /> Adjuntar Imagen
+                                                        <input
+                                                            type="file"
+                                                            accept="image/*"
+                                                            className="hidden"
+                                                            onChange={(e) => handleImageUpload(e.target.files[0], 'backgroundImageUrl')}
+                                                        />
+                                                    </label>
+                                                )}
+                                            </div>
                                         </div>
                                         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 group hover:shadow-md transition-shadow">
                                             <h4 className="font-bold text-slate-800 border-b border-slate-100 pb-3 mb-4 flex items-center gap-3">
@@ -497,6 +559,30 @@ const A3Page = () => {
                                                 onChange={(e) => setSelectedA3({ ...selectedA3, currentCondition: e.target.value })}
                                                 minHeight="160px"
                                             />
+                                            {/* Image Upload Area */}
+                                            <div className="mt-3">
+                                                {selectedA3.currentConditionImageUrl ? (
+                                                    <div className="relative group/img">
+                                                        <img src={selectedA3.currentConditionImageUrl} alt="Condición Actual" className="w-full h-auto max-h-[300px] object-contain rounded-lg border border-slate-200" />
+                                                        <button
+                                                            onClick={() => setSelectedA3({ ...selectedA3, currentConditionImageUrl: '' })}
+                                                            className="absolute top-2 right-2 bg-white/90 p-1.5 rounded-full text-red-500 opacity-0 group-hover/img:opacity-100 transition-opacity shadow-sm"
+                                                        >
+                                                            <Trash2 size={16} />
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <label className="flex items-center gap-2 text-sm text-brand-600 font-bold cursor-pointer hover:bg-brand-50 p-2 rounded-lg transition-colors w-fit">
+                                                        <ImageIcon size={16} /> Adjuntar Imagen
+                                                        <input
+                                                            type="file"
+                                                            accept="image/*"
+                                                            className="hidden"
+                                                            onChange={(e) => handleImageUpload(e.target.files[0], 'currentConditionImageUrl')}
+                                                        />
+                                                    </label>
+                                                )}
+                                            </div>
                                         </div>
                                         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 md:col-span-2 group hover:shadow-md transition-shadow">
                                             <h4 className="font-bold text-slate-800 border-b border-slate-100 pb-3 mb-4 flex items-center gap-3">
@@ -515,35 +601,35 @@ const A3Page = () => {
                                                 </div>
                                                 <div className="space-y-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
                                                     <div>
-                                                        <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Responsable</label>
+                                                        <label className="text-xs font-bold text-slate-700 uppercase mb-1 block">Responsable</label>
                                                         <div className="relative">
                                                             <User size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                                                             <select
-                                                                className="w-full py-2 pl-9 pr-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
+                                                                className="w-full py-2 pl-9 pr-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm text-slate-900 font-medium"
                                                                 value={selectedA3.responsible}
                                                                 onChange={(e) => setSelectedA3({ ...selectedA3, responsible: e.target.value })}
                                                             >
-                                                                <option value="" disabled>Seleccionar</option>
+                                                                <option value="" disabled className="text-slate-500">Seleccionar</option>
                                                                 {companyUsers && companyUsers.length > 0 ? (
                                                                     companyUsers.map(u => (
-                                                                        <option key={u.id} value={u.name}>{u.name}</option>
+                                                                        <option key={u.id} value={u.name} className="text-slate-900">{u.name}</option>
                                                                     ))
                                                                 ) : (
                                                                     <>
-                                                                        {selectedA3.responsible && <option value={selectedA3.responsible}>{selectedA3.responsible}</option>}
-                                                                        <option value="" disabled>No disponible</option>
+                                                                        {selectedA3.responsible && <option value={selectedA3.responsible} className="text-slate-900">{selectedA3.responsible}</option>}
+                                                                        <option value="" disabled className="text-slate-500">No disponible</option>
                                                                     </>
                                                                 )}
                                                             </select>
                                                         </div>
                                                     </div>
                                                     <div>
-                                                        <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Fecha Inicio</label>
+                                                        <label className="text-xs font-bold text-slate-700 uppercase mb-1 block">Fecha Inicio</label>
                                                         <div className="relative">
                                                             <Calendar size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                                                             <input
                                                                 type="date"
-                                                                className="w-full py-2 pl-9 pr-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm"
+                                                                className="w-full py-2 pl-9 pr-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm text-slate-900 font-medium"
                                                                 value={selectedA3.date}
                                                                 onChange={(e) => setSelectedA3({ ...selectedA3, date: e.target.value })}
                                                             />
@@ -573,6 +659,8 @@ const A3Page = () => {
                                             minHeight="100px"
                                         />
                                     </div>
+
+
 
                                     {/* ISHIKAWA SECTION */}
                                     <div className="space-y-6">
@@ -629,6 +717,22 @@ const A3Page = () => {
                                             <A3FiveWhys
                                                 items={selectedA3.multipleFiveWhys || []}
                                                 onChange={(newItems) => setSelectedA3({ ...selectedA3, multipleFiveWhys: newItems })}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* PARETO SECTION */}
+                                    <div className="space-y-6">
+                                        <div className="flex justify-between items-center px-2 border-t border-slate-200 pt-8">
+                                            <h5 className="font-bold text-slate-900 text-lg uppercase flex items-center gap-2 tracking-tight">
+                                                <div className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg"><BarChart2 size={20} /></div>
+                                                Análisis de Pareto (80/20)
+                                            </h5>
+                                        </div>
+                                        <div className="bg-white p-2 rounded-2xl shadow-sm border border-slate-200">
+                                            <A3Pareto
+                                                data={selectedA3.paretoData || []}
+                                                onChange={(newData) => setSelectedA3({ ...selectedA3, paretoData: newData })}
                                             />
                                         </div>
                                     </div>
@@ -727,11 +831,11 @@ const A3Page = () => {
                                             )}
 
                                             <div className="mt-6 bg-slate-50 p-4 rounded-xl border border-slate-100">
-                                                <label className="text-xs font-bold text-slate-500 uppercase mb-2 block flex items-center gap-2">
+                                                <label className="text-xs font-bold text-slate-700 uppercase mb-2 block flex items-center gap-2">
                                                     <FileText size={14} /> Notas de Cierre / Estandarización
                                                 </label>
                                                 <AutoResizeTextarea
-                                                    className="w-full p-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none transition-all"
+                                                    className="w-full p-3 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none transition-all text-slate-900 placeholder:text-slate-400"
                                                     placeholder="Comentarios finales sobre los resultados y próximos pasos..."
                                                     value={selectedA3.followUp}
                                                     onChange={(e) => setSelectedA3({ ...selectedA3, followUp: e.target.value })}
@@ -746,8 +850,9 @@ const A3Page = () => {
                         </div>
                     </div>
                 </div>
-            )}
-        </div>
+            )
+            }
+        </div >
     );
 };
 

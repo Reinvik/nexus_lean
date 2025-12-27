@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { supabase } from '../supabaseClient';
-import { Camera, Loader, X, Upload } from 'lucide-react';
+import { Loader, X, Upload } from 'lucide-react';
 
 const ImageUpload = ({ onUpload, currentImage, bucketName = 'images', placeholderText = "Subir Imagen", onFileSelect = null }) => {
     const [uploading, setUploading] = useState(false);

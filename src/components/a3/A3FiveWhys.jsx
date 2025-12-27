@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { Target, Trash2, Plus, GitBranch, CheckCircle, XCircle, HelpCircle, ArrowRight } from 'lucide-react';
 
 const A3FiveWhys = ({ items = [], onChange }) => {

@@ -1,11 +1,11 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { offlineService } from '../services/offlineService';
 import { useLocation } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import HeaderWithFilter from '../components/HeaderWithFilter';
-import { Plus, Search, Filter, Camera, X, Calendar, MapPin, User, FileText, CheckCircle, AlertCircle, Clock, PieChart as PieIcon, BarChart as BarIcon, ChevronDown, Activity, ArrowRight, Trash2, CloudOff } from 'lucide-react';
+import { Plus, Search, Camera, X, Calendar, MapPin, User, FileText, CheckCircle, AlertCircle, Clock, BarChart as BarIcon, ChevronDown, Activity, ArrowRight, Trash2, CloudOff } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { AuditService } from '../services/AuditService';
 import ImageUpload from '../components/ImageUpload';
@@ -30,21 +30,14 @@ const FiveSPage = () => {
     // Derive offline count directly from cards to ensure UI consistency
     const offlineCount = useMemo(() => cards.filter(c => c.isOffline).length, [cards]);
 
-    // Auto-sync when back online
+    // Fetch on Mount
     useEffect(() => {
-        const handleOnline = () => {
-            console.log("App is back online! Syncing...");
-            syncOfflineCards();
-        };
-        window.addEventListener('online', handleOnline);
-        return () => window.removeEventListener('online', handleOnline);
-    }, []);
+        if (user) {
+            fetchFiveSCards();
+        }
+    }, [user, fetchFiveSCards]);
 
-    // Data is now prefetched in DataContext on login.
-    // No need for local fetchCards effect.
-
-
-    const uploadFileToSupabase = async (file) => {
+    const uploadFileToSupabase = useCallback(async (file) => {
         const fileExt = file.name ? file.name.split('.').pop() : 'jpg';
         const fileName = `${Math.random().toString(36).substring(2, 15)}_${Date.now()}.${fileExt}`;
         const filePath = `${fileName}`;
@@ -54,9 +47,9 @@ const FiveSPage = () => {
 
         const { data } = supabase.storage.from('images').getPublicUrl(filePath);
         return data.publicUrl;
-    };
+    }, []);
 
-    const syncOfflineCards = async () => {
+    const syncOfflineCards = useCallback(async () => {
         // Prevent double syncs
         if (isSyncing) return;
 
@@ -140,7 +133,17 @@ const FiveSPage = () => {
         } finally {
             setIsSyncing(false);
         }
-    };
+    }, [isSyncing, offlineCount, fetchFiveSCards, uploadFileToSupabase, user, globalFilterCompanyId]);
+
+    // Auto-sync when back online
+    useEffect(() => {
+        const handleOnline = () => {
+            console.log("App is back online! Syncing...");
+            syncOfflineCards();
+        };
+        window.addEventListener('online', handleOnline);
+        return () => window.removeEventListener('online', handleOnline);
+    }, [syncOfflineCards]);
 
 
     // Handle deep linking via query params
@@ -166,7 +169,8 @@ const FiveSPage = () => {
         if (targetCompanyId === 'all') return cards;
         if (!targetCompanyId) return cards; // If no company ID (e.g. fallback), show what RLS returns
 
-        return cards.filter(c => c.companyId === targetCompanyId || c.responsible === user.name || !c.companyId);
+        // Use loose equality (==) to handle string '1' vs number 1 mismatch
+        return cards.filter(c => c.companyId == targetCompanyId || c.responsible === user.name || !c.companyId);
     }, [cards, user, globalFilterCompanyId]);
 
     // Listas para filtros y autocompletar
@@ -628,7 +632,7 @@ const FiveSPage = () => {
                                         ? 'bg-slate-200 text-slate-600 border-slate-300'
                                         : 'bg-slate-100 text-slate-600 border-slate-200 group-hover:bg-brand-50 group-hover:text-brand-600 group-hover:border-brand-100'
                                         }`}>
-                                        #{card.cardNumber ? String(card.cardNumber).padStart(3, '0') : '?'}
+                                        #{!isNaN(card.cardNumber) ? String(card.cardNumber).padStart(3, '0') : '?'}
                                     </span>
                                     {card.isOffline ? (
                                         <span className="text-xs text-slate-500 font-bold flex items-center gap-1 bg-yellow-100 px-2 py-0.5 rounded-full border border-yellow-200">
@@ -803,24 +807,46 @@ const FiveSPage = () => {
                         className="bg-white rounded-none md:rounded-2xl shadow-2xl w-full h-full md:h-auto max-w-4xl max-h-[100vh] md:max-h-[90vh] overflow-y-auto flex flex-col"
                         onClick={e => e.stopPropagation()}
                     >
-                        {/* Modal Header */}
-                        <div className="px-8 py-5 border-b border-slate-100 flex justify-between items-center bg-white sticky top-0 z-10 rounded-t-2xl">
-                            <div className="flex items-center gap-4">
-                                <div className={`p-3 rounded-xl ${selectedCard.id ? 'bg-indigo-50 text-indigo-600' : 'bg-brand-50 text-brand-600'}`}>
-                                    {selectedCard.id ? <FileText size={24} /> : <Plus size={24} />}
+                        {/* Modal Header with Action Icons */}
+                        <div className="px-4 md:px-8 py-4 border-b border-slate-100 flex justify-between items-center bg-white sticky top-0 z-10 rounded-t-2xl">
+                            <div className="flex items-center gap-3">
+                                <div className={`p-2.5 rounded-xl ${selectedCard.id ? 'bg-indigo-50 text-indigo-600' : 'bg-brand-50 text-brand-600'}`}>
+                                    {selectedCard.id ? <FileText size={20} /> : <Plus size={20} />}
                                 </div>
                                 <div>
-                                    <h2 className="text-xl font-bold text-slate-800">
+                                    <h2 className="text-lg font-bold text-slate-800">
                                         {selectedCard.id ? `Tarjeta #${String(selectedCard.cardNumber).padStart(3, '0')}` : 'Nueva Tarjeta 5S'}
                                     </h2>
-                                    <p className="text-sm text-slate-500 flex items-center gap-2">
-                                        Complete la información del hallazgo detectado
+                                    <p className="text-xs text-slate-500 hidden sm:block">
+                                        Complete la información del hallazgo
                                     </p>
                                 </div>
                             </div>
-                            <button onClick={handleCloseModal} className="text-slate-400 hover:text-slate-600 p-2 rounded-full hover:bg-slate-100 transition-colors">
-                                <X size={24} />
-                            </button>
+                            {/* Action Icons */}
+                            <div className="flex items-center gap-2">
+                                {/* Delete Button */}
+                                {selectedCard.id && (
+                                    <button
+                                        onClick={handleDeleteCard}
+                                        className="p-2 text-red-500 hover:bg-red-50 rounded-full transition-colors"
+                                        title="Eliminar"
+                                    >
+                                        <Trash2 size={22} />
+                                    </button>
+                                )}
+                                {/* Save Button */}
+                                <button
+                                    onClick={handleSaveCard}
+                                    className="p-2 text-brand-600 hover:bg-brand-50 rounded-full transition-colors"
+                                    title="Guardar"
+                                >
+                                    <Save size={22} />
+                                </button>
+                                {/* Close Button */}
+                                <button onClick={handleCloseModal} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors">
+                                    <X size={22} />
+                                </button>
+                            </div>
                         </div>
 
                         {/* Modal Content - Form Grid */}
@@ -839,7 +865,7 @@ const FiveSPage = () => {
                                 <input
                                     type="date"
                                     className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none transition-all shadow-sm"
-                                    value={selectedCard.date}
+                                    value={selectedCard.date || ''}
                                     onChange={e => updateField('date', e.target.value)}
                                 />
                             </div>
@@ -851,7 +877,7 @@ const FiveSPage = () => {
                                 <input
                                     type="text"
                                     className="w-full p-3 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none transition-all font-medium text-black placeholder-slate-500 shadow-sm"
-                                    value={selectedCard.location}
+                                    value={selectedCard.location || ''}
                                     onChange={e => updateField('location', e.target.value)}
                                     placeholder="Ej: Pasillo 4, Línea 2"
                                 />
@@ -864,7 +890,7 @@ const FiveSPage = () => {
                                 <input
                                     type="text"
                                     className="w-full p-3 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none transition-all font-medium text-black placeholder-slate-500 shadow-sm"
-                                    value={selectedCard.article}
+                                    value={selectedCard.article || ''}
                                     onChange={e => updateField('article', e.target.value)}
                                     placeholder="Ej: Estantería B, Motor 3"
                                 />
@@ -877,7 +903,7 @@ const FiveSPage = () => {
                                 <input
                                     type="text"
                                     className="w-full p-3 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none transition-all font-medium text-black placeholder-slate-500 shadow-sm"
-                                    value={selectedCard.reporter}
+                                    value={selectedCard.reporter || ''}
                                     onChange={e => updateField('reporter', e.target.value)}
                                     list="person-suggestions"
                                     placeholder="Escribe o selecciona..."
@@ -891,7 +917,7 @@ const FiveSPage = () => {
                                 <textarea
                                     className="w-full p-4 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none transition-all resize-none shadow-sm font-medium text-black placeholder-slate-500"
                                     rows="3"
-                                    value={selectedCard.reason}
+                                    value={selectedCard.reason || ''}
                                     onChange={e => updateField('reason', e.target.value)}
                                     placeholder="Describe detalladamente la anomalía detectada..."
                                 ></textarea>
@@ -904,7 +930,7 @@ const FiveSPage = () => {
                                 <textarea
                                     className="w-full p-4 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none transition-all resize-none shadow-sm font-medium text-black placeholder-slate-500"
                                     rows="2"
-                                    value={selectedCard.proposedAction}
+                                    value={selectedCard.proposedAction || ''}
                                     onChange={e => updateField('proposedAction', e.target.value)}
                                     placeholder="Describe la acción correctiva sugerida..."
                                 ></textarea>
@@ -918,7 +944,7 @@ const FiveSPage = () => {
                                 </label>
                                 <select
                                     className="w-full p-3 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none transition-all shadow-sm text-black font-medium"
-                                    value={selectedCard.responsible}
+                                    value={selectedCard.responsible || ''}
                                     onChange={e => updateField('responsible', e.target.value)}
                                 >
                                     <option value="" disabled>Selecciona Responsable</option>
@@ -942,7 +968,7 @@ const FiveSPage = () => {
                                 </label>
                                 <select
                                     className="w-full p-3 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none transition-all font-medium shadow-sm text-black cursor-pointer"
-                                    value={selectedCard.status}
+                                    value={selectedCard.status || 'Pendiente'}
                                     onChange={e => {
                                         const val = e.target.value;
                                         let color = '#ef4444';
@@ -978,7 +1004,7 @@ const FiveSPage = () => {
                             <input
                                 type="date"
                                 className="w-full p-3 bg-emerald-50 border border-emerald-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none transition-all disabled:opacity-50 disabled:bg-slate-100 disabled:border-slate-300 disabled:cursor-not-allowed shadow-sm text-black font-medium"
-                                value={selectedCard.solutionDate}
+                                value={selectedCard.solutionDate || ''}
                                 onChange={e => updateField('solutionDate', e.target.value)}
                                 disabled={selectedCard.status !== 'Cerrado'}
                             />
@@ -1044,35 +1070,6 @@ const FiveSPage = () => {
                             </div>
                         </div>
 
-                    </div>
-
-                    {/* Modal Footer - Static and integrated */}
-                    <div className="p-6 bg-gray-50 border-t border-gray-200 mt-0 rounded-b-2xl flex flex-col sm:flex-row justify-between items-center gap-4">
-                        {selectedCard.id ? (
-                            <button
-                                onClick={handleDeleteCard}
-                                className="w-full sm:w-auto px-6 py-3 bg-white text-red-600 font-bold rounded-lg border-2 border-red-100 hover:bg-red-50 hover:border-red-200 transition-all shadow-sm active:scale-95 flex items-center justify-center gap-2"
-                            >
-                                <Trash2 size={20} />
-                                <span>Eliminar Tarjeta</span>
-                            </button>
-                        ) : <div className="hidden sm:block"></div>}
-
-                        <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-                            <button
-                                onClick={handleCloseModal}
-                                className="w-full sm:w-auto px-8 py-3 bg-white text-slate-700 font-bold rounded-lg border-2 border-slate-200 hover:bg-slate-50 hover:text-black transition-all shadow-sm active:scale-95"
-                            >
-                                Cancelar
-                            </button>
-                            <button
-                                className="w-full sm:w-auto px-8 py-3 bg-brand-600 text-white font-bold rounded-lg border-2 border-transparent hover:bg-brand-700 transition-all shadow-md active:scale-95 flex items-center justify-center gap-2"
-                                onClick={handleSaveCard}
-                            >
-                                <Save size={20} />
-                                <span>Guardar Cambios</span>
-                            </button>
-                        </div>
                     </div>
                 </div>
             )}

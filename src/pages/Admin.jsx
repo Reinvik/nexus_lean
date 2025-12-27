@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import {
-    Trash2, Building, Users, CheckCircle, XCircle,
-    Shield, Activity, Database, AlertTriangle,
+    Trash2, Building, Users, CheckCircle,
+    Shield, Activity, AlertTriangle,
     RefreshCw, Wrench, Search, Plus, Ban
 } from 'lucide-react';
 
@@ -14,16 +14,16 @@ const AdminPage = () => {
     const [loadingUsers, setLoadingUsers] = useState(true);
     const [filterCompanyId, setFilterCompanyId] = useState('all');
 
-    useEffect(() => {
-        fetchUsers();
-    }, []);
-
-    const fetchUsers = async () => {
+    const fetchUsers = useCallback(async () => {
         setLoadingUsers(true);
         const data = await getAllUsers();
         setLocalUsers(data);
         setLoadingUsers(false);
-    };
+    }, [getAllUsers]);
+
+    useEffect(() => {
+        fetchUsers();
+    }, [fetchUsers]);
 
     if (!user || user.role !== 'admin') {
         return (

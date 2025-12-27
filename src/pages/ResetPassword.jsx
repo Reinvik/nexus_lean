@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
-import { Lock, ArrowRight, ArrowLeft, Loader2, Check } from 'lucide-react';
+import { Lock, ArrowRight, Loader2, Check } from 'lucide-react';
 
 const ResetPasswordPage = () => {
     const { updatePassword } = useAuth();

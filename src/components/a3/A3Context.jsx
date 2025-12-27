@@ -1,5 +1,3 @@
-import React from 'react';
-
 const A3Context = ({ data, onChange }) => {
     return (
         <div className="card animate-fade-in">

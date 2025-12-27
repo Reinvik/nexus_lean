@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Plus, Trash2, TrendingUp, TrendingDown, Settings, Maximize2, Minimize2, Calendar, Target, Activity, Gauge } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, AreaChart, Area, BarChart, Bar } from 'recharts';
+import { Plus, Trash2, TrendingUp, Settings, Maximize2, Minimize2, Calendar, Target, Gauge } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, AreaChart, Area } from 'recharts';
 
 const A3FollowUp = ({ data = {}, onChange }) => {
     const [showConfig, setShowConfig] = useState(false);
@@ -85,9 +85,10 @@ const A3FollowUp = ({ data = {}, onChange }) => {
             case 'month':
                 return date.toLocaleDateString('es-ES', { month: 'short', year: '2-digit' });
             case 'date':
-            default:
+            default: {
                 const [y, m, d] = dateStr.split('-');
                 return `${d}-${m}-${y.slice(2)}`;
+            }
         }
     };
 

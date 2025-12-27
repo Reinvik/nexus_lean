@@ -2,13 +2,13 @@ import { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../supabaseClient';
 import HeaderWithFilter from '../components/HeaderWithFilter';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
-import { Activity, CheckCircle, TrendingUp, Zap, ClipboardList, Target, Clock, Maximize2, Minimize2 } from 'lucide-react';
+import { Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, XAxis } from 'recharts';
+import { Activity, CheckCircle, Zap, ClipboardList, Target, Maximize2, Minimize2 } from 'lucide-react';
 import StatCard from '../components/StatCard';
 
 
 const Dashboard = () => {
-    const { user, globalFilterCompanyId, companies } = useAuth();
+    const { user, globalFilterCompanyId } = useAuth();
     const [data, setData] = useState({ fiveS: [], quickWins: [], vsms: [], a3: [] });
     const [isFullScreen, setIsFullScreen] = useState(false);
 
@@ -60,61 +60,143 @@ const Dashboard = () => {
         };
     }, []);
 
-    // 1. Fetch Data
+    // 1. Fetch Data Optimized
     useEffect(() => {
         const loadData = async () => {
             if (!user) return;
+            // console.time("DashboardLoad");
+
             try {
-                const [fiveSRes, quickWinsRes, vsmRes, a3Res] = await Promise.all([
-                    // Removed 'area' as it likely doesn't exist and causes error. Kept essential fields.
-                    supabase.from('five_s_cards').select('id, created_at, status, reason, responsible, company_id, date, location, article, type, proposed_action'),
-                    supabase.from('quick_wins').select('id, title, status, company_id, responsible, date, impact, description'),
-                    supabase.from('vsm_projects').select('id, company_id'),
-                    supabase.from('a3_projects').select('id, company_id, title, status, responsible, created_at, action_plan, follow_up_data')
+                // A. Parallel Count Queries (Much lighter than fetching all rows)
+                // Note: RLS applies automatically, so we just count what is visible.
+
+                // NOTE: Supabase JS select('*', { count: 'exact', head: true }) is the most efficient way to get counts.
+                // However, we need counts filtered by status. 
+                // Since we can't do "GROUP BY" easily in client-side Supabase without RPC, 
+                // we'll compromise: Fetch ID and STATUS columns only. This is very light.
+
+                const isAdmin = user.role === 'admin' || user.email === 'ariel.mellag@gmail.com';
+
+                // Helper to apply company filter if not "all" (for superadmin)
+                // For normal users, RLS handles it. For Superadmin, if they selected a company, we filter.
+                const applyFilter = (query) => {
+                    if (isAdmin && globalFilterCompanyId !== 'all') {
+                        return query.eq('company_id', globalFilterCompanyId);
+                    }
+                    return query;
+                }
+
+                // 1. FiveS Light Fetch (Id, Status) - For Pie Charts & Cards
+                const fiveSPromise = applyFilter(
+                    supabase.from('five_s_cards').select('id, status, company_id')
+                );
+
+                // 2. Quick Wins Light Fetch (Id, Status, Impact)
+                const qwPromise = applyFilter(
+                    supabase.from('quick_wins').select('id, status, impact, company_id')
+                );
+
+                // 3. VSM Count
+                const vsmPromise = applyFilter(
+                    supabase.from('vsm_projects').select('id, company_id', { count: 'exact', head: true })
+                );
+
+                // 4. A3 Projects - We need full data for charts, but let's try to limit if possible.
+                // Actually, we can fetch LIGHT A3 for stats, and FULL A3 for charts separately if needed.
+                // But for now, let's fetch essential A3 fields. FollowUpData can be large.
+                // Let's fetch FollowUpData ONLY for projects that likely represent charts? 
+                // No easy way to know. We'll fetch it but ensure we don't over-fetch.
+                const a3Promise = applyFilter(
+                    supabase.from('a3_projects').select('id, title, status, responsible, created_at, action_plan, follow_up_data, company_id')
+                );
+
+                // 5. Recent Activity (Limit 5 per type to ensure we have enough for a top 10 list)
+                // We fetch a bit more than needed to merge and sort.
+                const recentFiveSPromise = applyFilter(
+                    supabase.from('five_s_cards').select('id, date, reason, location, article, responsible, status, company_id').order('date', { ascending: false }).limit(6)
+                );
+                const recentQwPromise = applyFilter(
+                    supabase.from('quick_wins').select('id, date, title, description, responsible, status, impact, company_id').order('date', { ascending: false }).limit(6)
+                );
+                // A3 recent is covered by the main A3 fetch since A3s are usually few.
+
+                const [fiveSRes, qwRes, vsmRes, a3Res, recFiveS, recQw] = await Promise.all([
+                    fiveSPromise,
+                    qwPromise,
+                    vsmPromise,
+                    a3Promise,
+                    recentFiveSPromise,
+                    recentQwPromise
                 ]);
 
-                // Map data from DB to match frontend expectations
-                const fiveS = fiveSRes.data ? fiveSRes.data.map(c => ({
+                // console.timeEnd("DashboardLoad");
+
+                // --- Process Counts & Stats ---
+                // Map data to match component expectations (camelCase)
+                const fiveS = (fiveSRes.data || []).map(c => ({
                     id: c.id,
                     status: c.status,
-                    reason: c.reason, // Title for 5S
-                    responsible: c.responsible,
-                    companyId: c.company_id,
-                    date: c.date,
-                    location: c.location || c.area, // Fallback
-                    article: c.article
-                })) : [];
+                    companyId: c.company_id
+                }));
 
-                const quickWins = quickWinsRes.data ? quickWinsRes.data.map(w => ({
+                const quickWins = (qwRes.data || []).map(w => ({
                     id: w.id,
-                    title: w.title,
-                    description: w.description,
                     status: w.status,
                     companyId: w.company_id,
-                    responsible: w.responsible,
-                    date: w.date,
                     impact: w.impact
-                })) : [];
+                }));
 
-                const vsms = vsmRes.data ? vsmRes.data.map(v => ({
-                    id: v.id,
-                    companyId: v.company_id
-                })) : [];
+                // For VSM we only have count in vsmRes.count (head: true request)
+                // We fake objects with companyId if we filtered, but we actually just need the count for the metric.
+                // The filter logic expects "companyId".
+                // Since we already filtered by company in the query (applyFilter), the returned count is correct for the view.
+                // However, the "filteredData" memo re-filters. This is double filtering.
+                // If we pass empty objects, filterByCompany might fail if it looks for companyId.
+                // Let's just pass dummy objects that pass the filter.
+                // If isAdmin and filtered, we put that ID. If all, we put null? 
+                // Actually, simpler: We construct the metrics DIRECTLY from the counts if we trust the query?
+                // But the component structure relies on 'data' state being filtered by the memo.
 
-                const a3 = a3Res.data ? a3Res.data.map(p => ({
+                // Hack: Create dummy VSMs that will pass the client-side filter
+                // If we already filtered on DB, we give them the current globalFilterCompanyId (if valid) or just a pass.
+                // If user is not admin, we give user.companyId.
+                // Actually, easier: Just map them to have the companyId that was used in filter.
+                const effectiveCompanyId = (isAdmin && globalFilterCompanyId !== 'all') ? globalFilterCompanyId : (user.companyId || null);
+                const vsms = Array(vsmRes.count || 0).fill(0).map((_, i) => ({
+                    id: i,
+                    companyId: effectiveCompanyId // This ensures they survive the client-side filter
+                }));
+
+                const a3List = (a3Res.data || []).map(p => ({
                     id: p.id,
                     companyId: p.company_id,
                     title: p.title,
                     status: p.status,
                     responsible: p.responsible,
-                    created_at: p.created_at, // For timeline sorting
-                    actionPlan: p.action_plan || [], // Include Action Plan for metrics
+                    created_at: p.created_at,
+                    actionPlan: p.action_plan || [],
                     followUpData: Array.isArray(p.follow_up_data)
                         ? p.follow_up_data
                         : (p.follow_up_data && Object.keys(p.follow_up_data).length > 0 ? [p.follow_up_data] : [])
-                })) : [];
+                }));
 
-                setData({ fiveS, quickWins, vsms, a3 });
+                // --- Process Activity Feed ---
+                // We combine the specific "Recent" fetches. 
+                const recentActivity = [
+                    ...(recFiveS.data || []).map(i => ({ ...i, type: '5S', rawDate: i.date })),
+                    ...(recQw.data || []).map(i => ({ ...i, type: 'QW', rawDate: i.date })),
+                    ...a3List.map(i => ({ ...i, type: 'A3', rawDate: i.created_at }))
+                ].sort((a, b) => new Date(b.rawDate) - new Date(a.rawDate)).slice(0, 15);
+
+
+                setData({
+                    fiveS,
+                    quickWins,
+                    vsms,
+                    a3: a3List,
+                    recentActivity
+                });
+
             } catch (error) {
                 console.error("Error loading dashboard data:", error);
             }
@@ -245,11 +327,11 @@ const Dashboard = () => {
         return charts;
     }, [filteredData]);
 
-    const chartData = [
-        { name: '5S', Total: metrics.fiveS.total, Completados: metrics.fiveS.closed },
-        { name: 'Quick Wins', Total: metrics.quickWins.total, Completados: metrics.quickWins.done },
-        { name: 'Proyectos A3', Total: metrics.a3.total, Completados: metrics.a3.closed },
-    ];
+    // const chartData = [
+    //     { name: '5S', Total: metrics.fiveS.total, Completados: metrics.fiveS.closed },
+    //     { name: 'Quick Wins', Total: metrics.quickWins.total, Completados: metrics.quickWins.done },
+    //     { name: 'Proyectos A3', Total: metrics.a3.total, Completados: metrics.a3.closed },
+    // ];
 
     const pieData = [
         { name: 'Pendiente', value: metrics.fiveS.pending, color: '#ef4444' },
@@ -526,7 +608,7 @@ const Dashboard = () => {
                         <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl p-12 text-center">
                             <Activity size={48} className="text-slate-200 mx-auto mb-4" />
                             <p className="text-slate-400 font-medium">No hay gráficos de seguimiento activos</p>
-                            <p className="text-xs text-slate-300">Crea un A3 y añade gráficos con "Mostrar en Dashboard" activo.</p>
+                            <p className="text-xs text-slate-300">Crea un A3 y añade gráficos con &quot;Mostrar en Dashboard&quot; activo.</p>
                         </div>
                     )}
                 </div>
@@ -584,13 +666,10 @@ const Dashboard = () => {
                         {/* Vertical Line */}
                         <div className="absolute left-6 top-4 bottom-4 w-0.5 bg-slate-100 z-0"></div>
 
+
                         {(() => {
-                            // Aggregate and Sort Activity
-                            const allActivity = [
-                                ...filteredData.fiveS.map(i => ({ ...i, type: '5S', rawDate: i.date, label: 'Reporte 5S', icon: <ClipboardList size={14} />, color: 'text-emerald-500 bg-emerald-50 border-emerald-100' })),
-                                ...filteredData.quickWins.map(i => ({ ...i, type: 'QW', rawDate: i.date, label: 'Quick Win', icon: <Zap size={14} />, color: 'text-amber-500 bg-amber-50 border-amber-100' })),
-                                ...filteredData.a3.map(i => ({ ...i, type: 'A3', rawDate: i.created_at || new Date().toISOString(), label: 'Proyecto A3', icon: <Activity size={14} />, color: 'text-indigo-500 bg-indigo-50 border-indigo-100' }))
-                            ].sort((a, b) => new Date(b.rawDate) - new Date(a.rawDate)).slice(0, 10);
+                            // Use pre-fetched recent activity if available, or fallback to empty
+                            const allActivity = data.recentActivity || [];
 
                             if (allActivity.length === 0) return <div className="text-center py-12 text-slate-400">Sin actividad reciente.</div>;
 
@@ -600,6 +679,11 @@ const Dashboard = () => {
                                 // Time Format (Simple)
                                 const dateObj = new Date(item.rawDate);
                                 const dateStr = isNaN(dateObj.getTime()) ? 'Reciente' : dateObj.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+
+                                // Format logic
+                                let label = item.type === '5S' ? 'Reporte 5S' : (item.type === 'QW' ? 'Quick Win' : 'Proyecto A3');
+                                let icon = item.type === '5S' ? <ClipboardList size={14} /> : (item.type === 'QW' ? <Zap size={14} /> : <Activity size={14} />);
+                                let color = item.type === '5S' ? 'text-emerald-500 bg-emerald-50 border-emerald-100' : (item.type === 'QW' ? 'text-amber-500 bg-amber-50 border-amber-100' : 'text-indigo-500 bg-indigo-50 border-indigo-100');
 
                                 // Action & Detail Logic
                                 let actionText = "actualizó";
@@ -638,15 +722,15 @@ const Dashboard = () => {
                                         <div className="bg-white border border-slate-100 rounded-xl p-3 shadow-sm hover:shadow-md transition-shadow relative top-1">
                                             <div className="flex justify-between items-start mb-1">
                                                 <div className="flex items-center gap-2">
-                                                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold uppercase flex items-center gap-1 ${item.color}`}>
-                                                        {item.icon} {item.type}
+                                                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold uppercase flex items-center gap-1 ${color}`}>
+                                                        {icon} {label}
                                                     </span>
                                                     <span className="text-[10px] text-slate-400 font-medium">{dateStr}</span>
                                                 </div>
                                             </div>
 
                                             <p className="text-xs text-slate-600 leading-relaxed">
-                                                <span className="font-bold text-slate-800">{item.responsible || 'Usuario'}</span> {actionText} <span className="font-medium italic text-slate-500">"{descriptionText}"</span>
+                                                <span className="font-bold text-slate-800">{item.responsible || 'Usuario'}</span> {actionText} <span className="font-medium italic text-slate-500">&quot;{descriptionText}&quot;</span>
                                             </p>
 
                                             {/* Status Badge (Mini) */}

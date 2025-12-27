@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../context/AuthContext';
 import HeaderWithFilter from '../components/HeaderWithFilter';
-import { Plus, Search, Filter, X, Zap, CheckCircle, Clock, Target, User, Calendar, Image as ImageIcon, ExternalLink, Lightbulb, Trash2, ArrowRight, ChevronDown } from 'lucide-react';
+import { Plus, Search, Filter, X, Zap, CheckCircle, Clock, Target, User, Calendar, Image as ImageIcon, Lightbulb, Trash2, ArrowRight, ChevronDown } from 'lucide-react';
 import ImageUpload from '../components/ImageUpload';
 import StatCard from '../components/StatCard';
 import MobileFab from '../components/mobile/MobileFab';
@@ -20,7 +20,7 @@ const QuickWinsPage = () => {
 
     // Estado del modal de detalle
     const [selectedWin, setSelectedWin] = useState(null);
-    const [isEditing, setIsEditing] = useState(false);
+    // const [isEditing, setIsEditing] = useState(false);
 
     // Estado del modal de nueva idea
     const [isNewModalOpen, setIsNewModalOpen] = useState(false);
@@ -35,7 +35,7 @@ const QuickWinsPage = () => {
 
     // Estado local para los datos
     const [allWins, setAllWins] = useState([]);
-    const [loading, setLoading] = useState(true);
+    // const [loading, setLoading] = useState(true);
 
     // Cargar datos de Supabase
     useEffect(() => {
@@ -46,7 +46,7 @@ const QuickWinsPage = () => {
 
     const fetchWins = async () => {
         try {
-            setLoading(true);
+            // setLoading(true);
             const { data, error } = await supabase
                 .from('quick_wins')
                 .select('*')
@@ -79,7 +79,7 @@ const QuickWinsPage = () => {
             // Fallback for new database connectivity
             setAllWins([]);
         } finally {
-            setLoading(false);
+            // setLoading(false);
         }
     };
 
@@ -503,7 +503,7 @@ const QuickWinsPage = () => {
                                     <div className="bg-emerald-50/50 p-3 rounded-lg border border-emerald-100 mb-3 flex gap-3 items-start">
                                         <div className="mt-1 text-emerald-400"><CheckCircle size={14} /></div>
                                         <p className="text-sm text-slate-600 italic leading-snug">
-                                            "{win.completionComment}"
+                                            &quot;{win.completionComment}&quot;
                                         </p>
                                     </div>
                                 )}
@@ -791,7 +791,7 @@ const QuickWinsPage = () => {
                                             <div className="relative group rounded-2xl overflow-hidden shadow-lg border border-slate-200">
                                                 <img src={selectedWin.completionImage} className="w-full h-64 object-cover" alt="Evidencia" />
                                                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end p-6">
-                                                    <p className="text-white text-sm font-medium italic">"{selectedWin.completionComment}"</p>
+                                                    <p className="text-white text-sm font-medium italic">&quot;{selectedWin.completionComment}&quot;</p>
                                                 </div>
                                             </div>
                                             <div className="text-xs text-slate-400 text-center pt-2">

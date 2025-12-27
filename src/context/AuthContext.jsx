@@ -132,8 +132,20 @@ export const AuthProvider = ({ children }) => {
         const checkUser = async () => {
             try {
                 console.log("AuthContext: Checking session...");
-                const { data: { session }, error } = await supabase.auth.getSession();
-                console.log("AuthContext: Session result:", session, error);
+                const start = Date.now();
+
+                // Parallelize these distinct checks
+                const [sessionResult, _companies] = await Promise.all([
+                    supabase.auth.getSession(),
+                    // We can let fetchCompanies run here too to parallelize if called from effect
+                    // But since companies are used in login/register forms, we want them available. 
+                    // However, we shouldn't block checking the USER on companies. 
+                    // Let's just keep companies separate in its own effect or promise.
+                    Promise.resolve()
+                ]);
+
+                const { data: { session }, error } = sessionResult;
+                console.log(`AuthContext: Session checked in ${Date.now() - start}ms`);
 
                 if (error) {
                     console.error("AuthContext: Error getting session:", error);
@@ -162,7 +174,7 @@ export const AuthProvider = ({ children }) => {
                 console.warn("AuthContext: Forced loading to false due to timeout.");
                 setLoading(false);
             }
-        }, 6000);
+        }, 5000); // Reduced to 5s
 
         const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
             console.log("AuthContext: Auth state change:", event);
@@ -171,15 +183,14 @@ export const AuthProvider = ({ children }) => {
                 // This prevents white screen flashes on tab focus or network reconnection
                 const currentUser = userRef.current;
                 if (!currentUser || currentUser.id !== session.user.id) {
-                    setLoading(true);
+                    // Don't full block, just fetch
+                    // setLoading(true); // Removing this might improve perceived performance
                 }
 
                 try {
                     await fetchProfile(session.user);
                 } catch (e) {
                     console.error("AuthContext: Error in SIGNED_IN handler:", e);
-                } finally {
-                    setLoading(false);
                 }
             } else if (event === 'SIGNED_OUT') {
                 setUser(null);
@@ -200,9 +211,9 @@ export const AuthProvider = ({ children }) => {
             const domain = email.split('@')[1];
             if (!domain) return null;
 
-            // Short timeout for this fallback lookup (3 seconds)
+            // Short timeout for this fallback lookup (2 seconds)
             const timeoutPromise = new Promise((_, reject) =>
-                setTimeout(() => reject(new Error('Domain lookup timed out')), 3000)
+                setTimeout(() => reject(new Error('Domain lookup timed out')), 2000)
             );
 
             const { data } = await Promise.race([
@@ -225,9 +236,9 @@ export const AuthProvider = ({ children }) => {
         // HARDCODE ADMIN OVERRIDE FOR SPECIFIC EMAIL
         const isSuperAdmin = authUser.email === 'ariel.mellag@gmail.com';
 
-        // Timeout for the main profile fetch
+        // Timeout for the main profile fetch - REDUCED to 5s
         const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Request timed out')), 15000)
+            setTimeout(() => reject(new Error('Request timed out')), 5000)
         );
 
         let profileData = null;
@@ -235,6 +246,7 @@ export const AuthProvider = ({ children }) => {
 
         try {
             console.log("AuthContext: Fetching profile for", authUser.id);
+            const start = Date.now();
             const result = await Promise.race([
                 supabase
                     .from('profiles')
@@ -243,6 +255,8 @@ export const AuthProvider = ({ children }) => {
                     .maybeSingle(),
                 timeoutPromise
             ]);
+            console.log(`AuthContext: Profile fetch took ${Date.now() - start}ms`);
+
             profileData = result.data;
             fetchError = result.error;
         } catch (err) {
@@ -257,6 +271,7 @@ export const AuthProvider = ({ children }) => {
                 ...profileData,
                 role: isSuperAdmin ? 'admin' : profileData.role,
                 isAuthorized: isSuperAdmin ? true : profileData.is_authorized,
+                has_ai_access: isSuperAdmin ? true : !!profileData.has_ai_access,
                 companyId: profileData.company_id
             });
             return;
@@ -286,7 +301,7 @@ export const AuthProvider = ({ children }) => {
     };
 
     const login = async (email, password) => {
-        const { data, error } = await supabase.auth.signInWithPassword({
+        const { error } = await supabase.auth.signInWithPassword({
             email,
             password
         });
@@ -324,7 +339,7 @@ export const AuthProvider = ({ children }) => {
         // If email confirmation is OFF, the user is logged in.
         // We can try to update the profile with company_id
         if (data.user) {
-            const { error: profileError } = await supabase
+            await supabase
                 .from('profiles')
                 .update({ company_id: userData.companyId })
                 .eq('id', data.user.id);
@@ -349,10 +364,18 @@ export const AuthProvider = ({ children }) => {
 
     // Admin functions
     const adminAuthorizeUser = async (userId) => {
-        const { error } = await supabase
+        await supabase
             .from('profiles')
             .update({ is_authorized: true })
             .eq('id', userId);
+    };
+
+    const toggleAIAccess = async (userId, hasAccess) => {
+        const { error } = await supabase
+            .from('profiles')
+            .update({ has_ai_access: hasAccess })
+            .eq('id', userId);
+        return { success: !error, error };
     };
 
     const updateUserStatus = async (userId, status) => {
@@ -441,7 +464,10 @@ export const AuthProvider = ({ children }) => {
             companyUsers,
             globalFilterCompanyId,
             setGlobalFilterCompanyId,
+            globalFilterCompanyId,
+            setGlobalFilterCompanyId,
             updateUserStatus,
+            toggleAIAccess,
             refreshData,
             repairAdminProfile,
             updatePassword

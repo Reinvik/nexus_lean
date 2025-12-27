@@ -1,8 +1,8 @@
 import HeaderWithFilter from '../components/HeaderWithFilter';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../context/AuthContext';
-import { Plus, Trash2, Edit, ChevronDown, ChevronUp, Save, X, Calendar, User, Building, ClipboardCheck, BarChart2, Type, Wifi, UploadCloud } from 'lucide-react';
+import { Plus, Trash2, Edit, ChevronDown, ChevronUp, Save, X, Calendar, User, Building, BarChart2, Type, UploadCloud } from 'lucide-react';
 import MobileFab from '../components/mobile/MobileFab';
 import { offlineService } from '../services/offlineService';
 import {
@@ -66,14 +66,7 @@ const Auditoria5S = () => {
     const [editingId, setEditingId] = useState(null);
     const [availableAuditors, setAvailableAuditors] = useState([]);
 
-    // Fetch Audits
-    useEffect(() => {
-        if (user) {
-            fetchAudits();
-        }
-    }, [user, globalFilterCompanyId]);
-
-    const fetchAudits = async () => {
+    const fetchAudits = useCallback(async () => {
         setLoading(true);
         try {
             // Fetch Offline Audits
@@ -105,7 +98,14 @@ const Auditoria5S = () => {
         } finally {
             setLoading(false);
         }
-    };
+    }, [user, globalFilterCompanyId]);
+
+    // Fetch Audits
+    useEffect(() => {
+        if (user) {
+            fetchAudits();
+        }
+    }, [user, globalFilterCompanyId, fetchAudits]);
 
     const handleSyncAudits = async () => {
         setIsSyncing(true);
@@ -390,7 +390,7 @@ const Auditoria5S = () => {
             const entries = audit.audit_5s_entries.filter(e => e.section === section);
             const total = entries.reduce((acc, curr) => acc + curr.score, 0);
             const count = entries.length;
-            const max = count * 5;
+
 
             // Value Logic: Average Score instead of Total Sum
             const value = count > 0 ? parseFloat((total / count).toFixed(1)) : 0;

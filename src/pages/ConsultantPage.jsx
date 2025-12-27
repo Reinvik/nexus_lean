@@ -1,92 +1,15 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { supabase } from '../supabaseClient';
+import { useData } from '../context/DataContext';
 import AIConsultant from '../components/AIConsultant';
 import HeaderWithFilter from '../components/HeaderWithFilter';
-import { AuditService } from '../services/AuditService';
 import { Brain } from 'lucide-react';
 
 const ConsultantPage = () => {
     const { user, globalFilterCompanyId, companies } = useAuth();
-    const [data, setData] = useState({ fiveS: [], quickWins: [], vsms: [], a3: [] });
-    const [loading, setLoading] = useState(true);
+    const { fiveSCards, quickWinsData, vsmData, a3Data, loadingFiveS, loadingResponsables } = useData();
 
-    // Fetch Data
-    useEffect(() => {
-        const loadData = async () => {
-            if (!user) return;
-            try {
-                setLoading(true);
-                const [fiveSRes, quickWinsRes, vsmRes, a3Res] = await Promise.all([
-                    supabase.from('five_s_cards').select('id, created_at, status, reason, responsible, company_id, date, location, article, type, proposed_action'),
-                    supabase.from('quick_wins').select('id, title, status, company_id, responsible, date, impact, description'),
-                    supabase.from('vsm_projects').select('id, company_id'),
-                    supabase.from('a3_projects').select('id, company_id, title, status, responsible, created_at, action_plan, follow_up_data, background, current_condition, goal, root_cause, countermeasures, ishikawas, five_whys')
-                ]);
-
-                // Map data
-                const fiveS = fiveSRes.data ? fiveSRes.data.map(c => ({
-                    id: c.id,
-                    status: c.status,
-                    reason: c.reason,
-                    responsible: c.responsible,
-                    companyId: c.company_id,
-                    date: c.date,
-                    location: c.location,
-                    article: c.article
-                })) : [];
-
-                const quickWins = quickWinsRes.data ? quickWinsRes.data.map(w => ({
-                    id: w.id,
-                    title: w.title,
-                    description: w.description,
-                    status: w.status,
-                    companyId: w.company_id,
-                    responsible: w.responsible,
-                    date: w.date,
-                    impact: w.impact
-                })) : [];
-
-                const vsms = vsmRes.data ? vsmRes.data.map(v => ({
-                    id: v.id,
-                    companyId: v.company_id
-                })) : [];
-
-                const a3 = a3Res.data ? a3Res.data.map(p => ({
-                    id: p.id,
-                    companyId: p.company_id,
-                    title: p.title,
-                    status: p.status,
-                    responsible: p.responsible,
-                    created_at: p.created_at,
-                    actionPlan: p.action_plan || [],
-                    // Ensure we pass full structure for AI analysis
-                    background: p.background,
-                    currentCondition: p.current_condition,
-                    goal: p.goal,
-                    rootCause: p.root_cause,
-                    countermeasures: p.countermeasures,
-                    // Map Ishikawas and 5 Whys from direct DB columns
-                    ishikawas: p.ishikawas || [],
-                    multipleFiveWhys: p.five_whys || [], // Note: DB column is five_whys, frontend uses multipleFiveWhys
-
-                    followUpData: Array.isArray(p.follow_up_data)
-                        ? p.follow_up_data
-                        : (p.follow_up_data ? [p.follow_up_data] : [])
-                })) : [];
-
-                // Fetch Audit Logs (last 50)
-                const auditLogs = await AuditService.getLogs(null, 50);
-
-                setData({ fiveS, quickWins, vsms, a3, auditLogs });
-            } catch (error) {
-                console.error("Error loading consultant data:", error);
-            } finally {
-                setLoading(false);
-            }
-        };
-        loadData();
-    }, [user, globalFilterCompanyId]);
+    const loading = loadingFiveS || loadingResponsables;
 
     // Filter Data
     const filteredData = useMemo(() => {
@@ -101,18 +24,48 @@ const ConsultantPage = () => {
             return items.filter(item => item.companyId && item.companyId === targetCompanyId);
         };
 
+        // Prepare A3 detailed structure (ensure all fields expected by AI are present)
+        const enrichedA3 = (a3Data || []).map(p => ({
+            ...p,
+            background: p.background,
+            currentCondition: p.current_condition || p.currentCondition, // Handle snake_case vs camelCase if mixed
+            goal: p.goal,
+            rootCause: p.root_cause || p.rootCause,
+            countermeasures: p.countermeasures,
+            ishikawas: p.ishikawas || [],
+            multipleFiveWhys: p.multipleFiveWhys || p.five_whys || [], // Handle both keys
+            followUpData: Array.isArray(p.follow_up_data) ? p.follow_up_data : (p.followUpData || [])
+        }));
+
         return {
-            fiveS: filterByCompany(data.fiveS),
-            quickWins: filterByCompany(data.quickWins),
-            vsms: filterByCompany(data.vsms),
-            a3: filterByCompany(data.a3),
-            auditLogs: data.auditLogs || []
+            fiveS: filterByCompany(fiveSCards),
+            quickWins: filterByCompany(quickWinsData),
+            vsms: filterByCompany(vsmData),
+            a3: filterByCompany(enrichedA3),
+            auditLogs: [] // Audit logs can be fetched separately if strictly needed, or omitted for speed
         };
-    }, [user, globalFilterCompanyId, data]);
+    }, [user, globalFilterCompanyId, fiveSCards, quickWinsData, vsmData, a3Data]);
 
     const companyName = companies?.find(c => c.id === globalFilterCompanyId)?.name || 'Todas las Empresas';
 
     if (!user) return <div className="flex h-screen items-center justify-center text-slate-400">Cargando...</div>;
+
+    // Permissions Check
+    const hasAIAccess = user.role === 'admin' || user.has_ai_access === true;
+
+    if (!hasAIAccess) {
+        return (
+            <div className="max-w-7xl mx-auto p-8 flex flex-col items-center justify-center h-[60vh] text-center">
+                <div className="bg-slate-100 p-6 rounded-full mb-6">
+                    <Brain size={48} className="text-slate-400" />
+                </div>
+                <h2 className="text-2xl font-bold text-slate-700 mb-2">Acceso Restringido</h2>
+                <p className="text-slate-500 max-w-md">
+                    No tienes permisos para acceder al Consultor IA. Contacta a tu administrador para solicitar acceso.
+                </p>
+            </div>
+        );
+    }
 
     return (
         <div className="max-w-7xl mx-auto space-y-6 h-[calc(100vh-100px)] flex flex-col">
