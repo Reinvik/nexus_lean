@@ -75,7 +75,7 @@ const Dashboard = () => {
                 // Since we can't do "GROUP BY" easily in client-side Supabase without RPC, 
                 // we'll compromise: Fetch ID and STATUS columns only. This is very light.
 
-                const isAdmin = user.role === 'admin' || user.email === 'ariel.mellag@gmail.com';
+                const isAdmin = user.role === 'admin' || user.role === 'superadmin' || user.email === 'ariel.mellag@gmail.com';
 
                 // Helper to apply company filter if not "all" (for superadmin)
                 // For normal users, RLS handles it. For Superadmin, if they selected a company, we filter.
@@ -86,9 +86,9 @@ const Dashboard = () => {
                     return query;
                 }
 
-                // 1. FiveS Light Fetch (Id, Status) - For Pie Charts & Cards
+                // 1. FiveS Light Fetch (Id, Status, Date, SolutionDate) - For Stats
                 const fiveSPromise = applyFilter(
-                    supabase.from('five_s_cards').select('id, status, company_id')
+                    supabase.from('five_s_cards').select('id, status, company_id, date, solution_date')
                 );
 
                 // 2. Quick Wins Light Fetch (Id, Status, Impact)
@@ -101,24 +101,18 @@ const Dashboard = () => {
                     supabase.from('vsm_projects').select('id, company_id', { count: 'exact', head: true })
                 );
 
-                // 4. A3 Projects - We need full data for charts, but let's try to limit if possible.
-                // Actually, we can fetch LIGHT A3 for stats, and FULL A3 for charts separately if needed.
-                // But for now, let's fetch essential A3 fields. FollowUpData can be large.
-                // Let's fetch FollowUpData ONLY for projects that likely represent charts? 
-                // No easy way to know. We'll fetch it but ensure we don't over-fetch.
+                // 4. A3 Projects
                 const a3Promise = applyFilter(
                     supabase.from('a3_projects').select('id, title, status, responsible, created_at, action_plan, follow_up_data, company_id')
                 );
 
-                // 5. Recent Activity (Limit 5 per type to ensure we have enough for a top 10 list)
-                // We fetch a bit more than needed to merge and sort.
+                // 5. Recent Activity
                 const recentFiveSPromise = applyFilter(
                     supabase.from('five_s_cards').select('id, date, reason, location, article, responsible, status, company_id').order('date', { ascending: false }).limit(6)
                 );
                 const recentQwPromise = applyFilter(
                     supabase.from('quick_wins').select('id, date, title, description, responsible, status, impact, company_id').order('date', { ascending: false }).limit(6)
                 );
-                // A3 recent is covered by the main A3 fetch since A3s are usually few.
 
                 const [fiveSRes, qwRes, vsmRes, a3Res, recFiveS, recQw] = await Promise.all([
                     fiveSPromise,
@@ -132,11 +126,12 @@ const Dashboard = () => {
                 // console.timeEnd("DashboardLoad");
 
                 // --- Process Counts & Stats ---
-                // Map data to match component expectations (camelCase)
                 const fiveS = (fiveSRes.data || []).map(c => ({
                     id: c.id,
                     status: c.status,
-                    companyId: c.company_id
+                    companyId: c.company_id,
+                    date: c.date,
+                    solutionDate: c.solution_date
                 }));
 
                 const quickWins = (qwRes.data || []).map(w => ({
@@ -146,25 +141,10 @@ const Dashboard = () => {
                     impact: w.impact
                 }));
 
-                // For VSM we only have count in vsmRes.count (head: true request)
-                // We fake objects with companyId if we filtered, but we actually just need the count for the metric.
-                // The filter logic expects "companyId".
-                // Since we already filtered by company in the query (applyFilter), the returned count is correct for the view.
-                // However, the "filteredData" memo re-filters. This is double filtering.
-                // If we pass empty objects, filterByCompany might fail if it looks for companyId.
-                // Let's just pass dummy objects that pass the filter.
-                // If isAdmin and filtered, we put that ID. If all, we put null? 
-                // Actually, simpler: We construct the metrics DIRECTLY from the counts if we trust the query?
-                // But the component structure relies on 'data' state being filtered by the memo.
-
-                // Hack: Create dummy VSMs that will pass the client-side filter
-                // If we already filtered on DB, we give them the current globalFilterCompanyId (if valid) or just a pass.
-                // If user is not admin, we give user.companyId.
-                // Actually, easier: Just map them to have the companyId that was used in filter.
                 const effectiveCompanyId = (isAdmin && globalFilterCompanyId !== 'all') ? globalFilterCompanyId : (user.companyId || null);
                 const vsms = Array(vsmRes.count || 0).fill(0).map((_, i) => ({
                     id: i,
-                    companyId: effectiveCompanyId // This ensures they survive the client-side filter
+                    companyId: effectiveCompanyId
                 }));
 
                 const a3List = (a3Res.data || []).map(p => ({
@@ -181,7 +161,6 @@ const Dashboard = () => {
                 }));
 
                 // --- Process Activity Feed ---
-                // We combine the specific "Recent" fetches. 
                 const recentActivity = [
                     ...(recFiveS.data || []).map(i => ({ ...i, type: '5S', rawDate: i.date })),
                     ...(recQw.data || []).map(i => ({ ...i, type: 'QW', rawDate: i.date })),
@@ -208,13 +187,12 @@ const Dashboard = () => {
     const filteredData = useMemo(() => {
         if (!user) return { fiveS: [], quickWins: [], vsms: [], a3: [] };
 
-        const isAdmin = user.role === 'admin' || user.email === 'ariel.mellag@gmail.com';
+        const isAdmin = user.role === 'admin' || user.role === 'superadmin' || user.email === 'ariel.mellag@gmail.com';
         const targetCompanyId = isAdmin ? globalFilterCompanyId : user.companyId;
 
         const filterByCompany = (items) => {
             if (!Array.isArray(items)) return [];
             if (targetCompanyId === 'all') return items;
-            // Only include items that have a matching company_id (exclude null/undefined)
             return items.filter(item => item.companyId && item.companyId === targetCompanyId);
         };
 
@@ -234,6 +212,22 @@ const Dashboard = () => {
         const fiveSPending = fiveS.filter(i => i.status === 'Pendiente').length;
         const fiveSInProcess = fiveS.filter(i => i.status === 'En Proceso').length;
         const fiveSCompletion = fiveSTotal > 0 ? Math.round((fiveSClosed / fiveSTotal) * 100) : 0;
+
+        // Calculate Average Closure Time
+        const closedCards = fiveS.filter(c => c.status === 'Cerrado' && c.date && c.solutionDate);
+        let totalDays = 0;
+        closedCards.forEach(c => {
+            const start = new Date(c.date);
+            const end = new Date(c.solutionDate);
+            if (!isNaN(start) && !isNaN(end)) {
+                // Difference in days
+                const diffTime = Math.abs(end - start);
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                totalDays += diffDays;
+            }
+        });
+        const avgClosureDays = closedCards.length > 0 ? (totalDays / closedCards.length).toFixed(1) : 0;
+
 
         const winsDone = quickWins.filter(i => i.status === 'done').length;
         const winsTotal = quickWins.length;
@@ -257,7 +251,14 @@ const Dashboard = () => {
             : 0;
 
         return {
-            fiveS: { total: fiveSTotal, closed: fiveSClosed, pending: fiveSPending, inProcess: fiveSInProcess, rate: fiveSCompletion },
+            fiveS: {
+                total: fiveSTotal,
+                closed: fiveSClosed,
+                pending: fiveSPending,
+                inProcess: fiveSInProcess,
+                rate: fiveSCompletion,
+                avgClosure: avgClosureDays
+            },
             quickWins: { total: winsTotal, done: winsDone, impact: winsImpact },
             vsm: { count: vsmCount },
             a3: { total: a3.length, closed: a3.filter(p => p.status === 'Cerrado').length, rate: a3CompletionRate }
@@ -326,12 +327,6 @@ const Dashboard = () => {
         });
         return charts;
     }, [filteredData]);
-
-    // const chartData = [
-    //     { name: '5S', Total: metrics.fiveS.total, Completados: metrics.fiveS.closed },
-    //     { name: 'Quick Wins', Total: metrics.quickWins.total, Completados: metrics.quickWins.done },
-    //     { name: 'Proyectos A3', Total: metrics.a3.total, Completados: metrics.a3.closed },
-    // ];
 
     const pieData = [
         { name: 'Pendiente', value: metrics.fiveS.pending, color: '#ef4444' },
@@ -567,7 +562,7 @@ const Dashboard = () => {
                                         </div>
 
                                         {/* Chart Area */}
-                                        <div className="flex-1 w-full min-h-[120px] -mx-2">
+                                        <div className="flex-1 w-full min-h-[120px] -mx-2 overflow-hidden">
                                             <ResponsiveContainer width="100%" height="100%">
                                                 <AreaChart data={chart.data}>
                                                     <defs>
@@ -613,45 +608,70 @@ const Dashboard = () => {
                     )}
                 </div>
 
-                {/* 5S Status Distribution - 1/3 Width */}
-                <div className="bg-white p-6 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all border border-slate-100 lg:col-span-1 flex flex-col justify-between">
-                    <h4 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-6 z-10 flex items-center gap-2">
-                        <CheckCircle size={16} className="text-emerald-500" /> Estado de Hallazgos 5S
+                {/* 5S Status Distribution - REPLACED WITH AVERAGE CLOSURE TIME */}
+                <div className="bg-white p-6 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all border border-slate-100 lg:col-span-1 flex flex-col h-[340px] relative overflow-hidden">
+                    <h4 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-2 z-10 flex items-center gap-2">
+                        <CheckCircle size={16} className="text-emerald-500" /> Promedio de Cierre de Tarjetas 5S
                     </h4>
-                    <div className="h-72 w-full flex items-center justify-center -mt-4">
-                        {pieData.length > 0 ? (
-                            <ResponsiveContainer width="100%" height="100%">
-                                <PieChart>
-                                    <Pie
-                                        data={pieData}
-                                        cx="50%"
-                                        cy="50%"
-                                        innerRadius={60}
-                                        outerRadius={80}
-                                        paddingAngle={5}
-                                        dataKey="value"
-                                        stroke="none"
-                                    >
-                                        {pieData.map((entry, index) => (
-                                            <Cell key={`cell-${index}`} fill={entry.color} />
-                                        ))}
-                                    </Pie>
-                                    <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)', fontSize: '12px' }} />
-                                    <Legend
-                                        verticalAlign="bottom"
-                                        align="center"
-                                        iconType="circle"
-                                        wrapperStyle={{ fontSize: '12px', fontWeight: '500', color: '#64748b' }}
-                                    />
-                                </PieChart>
-                            </ResponsiveContainer>
-                        ) : (
-                            <div className="flex flex-col items-center justify-center text-gray-400 p-8 border-2 border-dashed border-gray-100 rounded-xl bg-gray-50/50 w-full h-full">
-                                <Activity size={48} className="mb-4 opacity-20" />
-                                <p className="font-medium">Sin datos suficientes</p>
-                                <p className="text-sm">Agrega auditorías o tarjetas</p>
+
+                    <div className="w-full flex-1 relative z-10 -mt-2">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                                <Pie
+                                    data={[{ value: 100 }]}
+                                    cx="50%"
+                                    cy="50%"
+                                    innerRadius={70}
+                                    outerRadius={90}
+                                    startAngle={90}
+                                    endAngle={-270}
+                                    dataKey="value"
+                                    stroke="none"
+                                    isAnimationActive={true}
+                                >
+                                    <Cell fill="#10b981" fillOpacity={0.1} />
+                                </Pie>
+                                <Pie
+                                    data={[{ value: 100 }]} // Visual trick: Full ring but thin, or just rely on the background ring
+                                    cx="50%"
+                                    cy="50%"
+                                    innerRadius={70}
+                                    outerRadius={90}
+                                    startAngle={90}
+                                    endAngle={-270}
+                                    dataKey="value"
+                                    stroke="none"
+                                >
+                                    {/* Just a subtle border effect or leave empty if we just want the number */}
+                                    <Cell fill="transparent" stroke="#10b981" strokeWidth={0} />
+                                </Pie>
+                            </PieChart>
+                        </ResponsiveContainer>
+
+                        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                            <div className="relative">
+                                <span className="text-6xl font-black text-slate-700 tracking-tight">
+                                    {metrics.fiveS.avgClosure}
+                                </span>
+                                {parseFloat(metrics.fiveS.avgClosure) > 15 && (
+                                    <span className="absolute -top-2 -right-4 flex h-3 w-3">
+                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                                        <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-500"></span>
+                                    </span>
+                                )}
                             </div>
-                        )}
+                            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Días Promedio</span>
+                        </div>
+                    </div>
+
+                    <div className="absolute -bottom-8 -right-8 opacity-[0.03] rotate-12 pointer-events-none">
+                        <CheckCircle size={180} className="text-emerald-500" />
+                    </div>
+
+                    <div className="text-center z-10 mt-auto">
+                        <p className="text-xs text-slate-400 font-medium px-4 leading-relaxed">
+                            Tiempo promedio desde la detección<br />hasta el cierre del hallazgo.
+                        </p>
                     </div>
                 </div>
 

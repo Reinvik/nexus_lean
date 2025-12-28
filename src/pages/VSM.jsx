@@ -39,7 +39,8 @@ const VSMPage = () => {
                     image: v.image_url,
                     miroLink: v.miro_link,
                     description: v.description,
-                    companyId: v.company_id
+                    companyId: v.company_id,
+                    taktTime: v.takt_time
                 }));
                 setVsms(formatted);
             }
@@ -100,7 +101,8 @@ const VSMPage = () => {
             efficiency: '',
             image: null,
             miroLink: '',
-            description: ''
+            description: '',
+            taktTime: ''
         });
     };
 
@@ -152,7 +154,8 @@ const VSMPage = () => {
             image_url: selectedVsm.image,
             miro_link: selectedVsm.miroLink,
             description: selectedVsm.description,
-            company_id: resolvedCompanyId
+            company_id: resolvedCompanyId,
+            takt_time: selectedVsm.taktTime
         };
 
         try {
@@ -282,7 +285,7 @@ const VSMPage = () => {
                                 <p className="text-sm text-slate-500 line-clamp-2 mb-5 flex-1">{vsm.description || 'Sin descripción disponible.'}</p>
 
                                 {/* Metrics Grid */}
-                                <div className="grid grid-cols-3 gap-2 mb-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                                <div className="grid grid-cols-4 gap-2 mb-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
                                     <div className="text-center">
                                         <span className="block text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">Lead Time</span>
                                         <span className="text-sm font-bold text-slate-700">{vsm.leadTime || '-'}</span>
@@ -294,6 +297,10 @@ const VSMPage = () => {
                                     <div className="text-center border-l border-slate-200">
                                         <span className="block text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">Eficiencia</span>
                                         <span className="text-sm font-bold text-emerald-600">{vsm.efficiency || '-'}</span>
+                                    </div>
+                                    <div className="text-center border-l border-slate-200">
+                                        <span className="block text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">Takt Time</span>
+                                        <span className="text-sm font-bold text-slate-700">{vsm.taktTime || '-'}</span>
                                     </div>
                                 </div>
 
@@ -543,6 +550,20 @@ const VSMPage = () => {
                                                         value={selectedVsm.efficiency}
                                                         onChange={(e) => setSelectedVsm({ ...selectedVsm, efficiency: e.target.value })}
                                                         placeholder="Ej: 15%"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Takt Time</span>
+                                                <div className="flex items-center gap-3 mt-1.5">
+                                                    <div className="bg-white p-2 rounded-lg border border-slate-200 text-slate-400">
+                                                        <Clock size={18} />
+                                                    </div>
+                                                    <input
+                                                        className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all text-slate-700 font-medium"
+                                                        value={selectedVsm.taktTime}
+                                                        onChange={(e) => setSelectedVsm({ ...selectedVsm, taktTime: e.target.value })}
+                                                        placeholder="Ej: 30 seg"
                                                     />
                                                 </div>
                                             </div>

@@ -13,3 +13,4 @@ if (Test-Path $NodePath) {
 Set-Location "$PSScriptRoot"
 Write-Host "Iniciando Nexus BE-LEAN..." -ForegroundColor Cyan
 npm run dev
+    
