@@ -10,6 +10,12 @@ const Sidebar = ({ isOpen, onClose }) => {
     const [avatarUrl, setAvatarUrl] = useState(null);
     const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
 
+    // Password Change State
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmNewPassword, setConfirmNewPassword] = useState('');
+    const [passwordLoading, setPasswordLoading] = useState(false);
+    const { updatePassword } = useAuth(); // Assuming updatePassword is exposed in context
+
     useEffect(() => {
         const fetchAvatar = async () => {
             try {
@@ -45,6 +51,30 @@ const Sidebar = ({ isOpen, onClose }) => {
         } catch (error) {
             console.error('Error updating avatar:', error);
             alert('Error actualizando imagen de perfil');
+        }
+    };
+
+    const handlePasswordChange = async (e) => {
+        e.preventDefault();
+        if (newPassword !== confirmNewPassword) {
+            alert('Las contraseñas no coinciden');
+            return;
+        }
+        if (newPassword.length < 6) {
+            alert('La contraseña debe tener al menos 6 caracteres');
+            return;
+        }
+
+        setPasswordLoading(true);
+        const { success, message } = await updatePassword(newPassword);
+        setPasswordLoading(false);
+
+        if (success) {
+            alert('Contraseña actualizada correctamente');
+            setNewPassword('');
+            setConfirmNewPassword('');
+        } else {
+            alert('Error al actualizar contraseña: ' + message);
         }
     };
 
@@ -183,7 +213,7 @@ const Sidebar = ({ isOpen, onClose }) => {
                         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setIsAvatarModalOpen(false)}>
                             <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm transform transition-all scale-100" onClick={e => e.stopPropagation()}>
                                 <div className="flex justify-between items-center mb-6">
-                                    <h3 className="font-bold text-lg text-slate-800">Foto de Perfil</h3>
+                                    <h3 className="font-bold text-lg text-slate-800">Mi Perfil</h3>
                                     <button onClick={() => setIsAvatarModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-100 transition-colors">
                                         <X size={20} />
                                     </button>
@@ -213,11 +243,47 @@ const Sidebar = ({ isOpen, onClose }) => {
                                     </div>
                                 </div>
 
+                                <hr className="my-6 border-slate-100" />
+
+                                <h4 className="text-sm font-bold text-slate-700 mb-4 flex items-center gap-2">
+                                    <ShieldCheck size={16} className="text-brand-500" /> Cambiar Contraseña
+                                </h4>
+
+                                <form onSubmit={handlePasswordChange} className="space-y-4 mb-6">
+                                    <div>
+                                        <input
+                                            type="password"
+                                            placeholder="Nueva Contraseña"
+                                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
+                                            value={newPassword}
+                                            onChange={(e) => setNewPassword(e.target.value)}
+                                            minLength={6}
+                                        />
+                                    </div>
+                                    <div>
+                                        <input
+                                            type="password"
+                                            placeholder="Confirmar Contraseña"
+                                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
+                                            value={confirmNewPassword}
+                                            onChange={(e) => setConfirmNewPassword(e.target.value)}
+                                            minLength={6}
+                                        />
+                                    </div>
+                                    <button
+                                        type="submit"
+                                        disabled={!newPassword || passwordLoading}
+                                        className="w-full py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-900 transition-colors text-xs font-bold uppercase tracking-wider disabled:opacity-50"
+                                    >
+                                        {passwordLoading ? 'Actualizando...' : 'Actualizar Contraseña'}
+                                    </button>
+                                </form>
+
                                 <button
                                     onClick={() => setIsAvatarModalOpen(false)}
                                     className="w-full py-2.5 bg-brand-600 text-white rounded-xl hover:bg-brand-700 transition-colors font-medium text-sm shadow-md shadow-brand-500/20 active:scale-95 duration-200"
                                 >
-                                    Guardar Cambios
+                                    Cerrar
                                 </button>
                             </div>
                         </div>

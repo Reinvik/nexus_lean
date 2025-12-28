@@ -24,6 +24,7 @@ const LoginPage = lazy(() => import('./pages/Login'));
 const RegisterPage = lazy(() => import('./pages/Register'));
 const ForgotPasswordPage = lazy(() => import('./pages/ForgotPassword'));
 const ResetPasswordPage = lazy(() => import('./pages/ResetPassword'));
+const SetPasswordPage = lazy(() => import('./pages/SetPassword'));
 
 // Offline Pages
 const OfflineFiveS = lazy(() => import('./pages/OfflineFiveS'));
@@ -49,6 +50,7 @@ function App() {
               <Route path="/register" element={<RegisterPage />} />
               <Route path="/forgot-password" element={<ForgotPasswordPage />} />
               <Route path="/reset-password" element={<ResetPasswordPage />} />
+              <Route path="/set-password" element={<SetPasswordPage />} />
               <Route path="/offline-access" element={<OfflineFiveS />} />
               <Route path="/offline-audit" element={<OfflineAudit />} />
 

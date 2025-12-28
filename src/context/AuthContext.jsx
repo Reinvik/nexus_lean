@@ -403,7 +403,7 @@ export const AuthProvider = ({ children }) => {
                 },
                 // Redirect to a page where they might be prompted to set password if needed
                 // For now, root is fine, or we could send to /profile
-                emailRedirectTo: window.location.origin
+                emailRedirectTo: window.location.origin + '/set-password'
             }
         });
 
