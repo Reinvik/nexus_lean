@@ -3,16 +3,22 @@ import { useAuth } from '../context/AuthContext';
 import {
     Trash2, Building, Users, CheckCircle,
     Shield, Activity, AlertTriangle,
-    RefreshCw, Wrench, Search, Plus, Ban
+    RefreshCw, Wrench, Search, Plus, Ban, Send, X
 } from 'lucide-react';
 
 const AdminPage = () => {
-    const { user, companies, addCompany, removeCompany, removeUser, adminAuthorizeUser, updateUserStatus, getAllUsers, updateUserRole, updateUserCompany, refreshData, repairAdminProfile } = useAuth();
+    const { user, companies, addCompany, removeCompany, removeUser, adminAuthorizeUser, updateUserStatus, getAllUsers, updateUserRole, updateUserCompany, refreshData, repairAdminProfile, inviteUser } = useAuth();
     const [newCompanyName, setNewCompanyName] = useState('');
     const [newCompanyDomain, setNewCompanyDomain] = useState('');
     const [localUsers, setLocalUsers] = useState([]);
     const [loadingUsers, setLoadingUsers] = useState(true);
     const [filterCompanyId, setFilterCompanyId] = useState('all');
+
+    // Invite Modal State
+    const [showInviteModal, setShowInviteModal] = useState(false);
+    const [inviteName, setInviteName] = useState('');
+    const [inviteEmail, setInviteEmail] = useState('');
+    const [inviteCompanyId, setInviteCompanyId] = useState('');
 
     const fetchUsers = useCallback(async () => {
         setLoadingUsers(true);
@@ -21,11 +27,36 @@ const AdminPage = () => {
         setLoadingUsers(false);
     }, [getAllUsers]);
 
+    const handleInviteUser = async (e) => {
+        e.preventDefault();
+        if (!inviteName || !inviteEmail || !inviteCompanyId) return;
+
+        const { success, message } = await inviteUser(inviteEmail, inviteName, inviteCompanyId);
+
+        if (success) {
+            alert('Invitación enviada con éxito a ' + inviteEmail);
+            setShowInviteModal(false);
+            setInviteName('');
+            setInviteEmail('');
+            setInviteCompanyId('');
+            fetchUsers(); // Refresh list (though they might not appear yet until they click the link)
+        } else {
+            alert('Error al enviar invitación: ' + message);
+        }
+    };
+
     useEffect(() => {
         fetchUsers();
     }, [fetchUsers]);
 
-    if (!user || user.role !== 'admin') {
+    // Auto-set invite company for Company Admins
+    useEffect(() => {
+        if (user && !user.isGlobalAdmin && user.companyId) {
+            setInviteCompanyId(user.companyId);
+        }
+    }, [user]);
+
+    if (!user || (user.role !== 'admin' && user.role !== 'superadmin')) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-slate-50">
                 <div className="text-center p-8 bg-white rounded-2xl shadow-xl max-w-md border border-slate-100">
@@ -54,13 +85,24 @@ const AdminPage = () => {
     };
 
     const handleRemoveUser = async (userId) => {
-        if (window.confirm('¿Estás seguro de eliminar este usuario? Esto no se puede deshacer.')) {
+        if (window.confirm('ADVERTENCIA: ¿Estás seguro de eliminar este usuario?\n\nSi el usuario tiene datos asociados (Tarjetas, Proyectos), la eliminación fallará para proteger la integridad de los datos.\n\nEn ese caso, se recomienda DESACTIVAR el acceso.')) {
             const { success, error } = await removeUser(userId);
             if (success) {
                 fetchUsers();
+                alert('Usuario eliminado correctamente.');
             } else {
-                alert('Error al eliminar usuario: ' + (error?.message || 'Error desconocido'));
                 console.error('Error removing user:', error);
+
+                // Check for Foreign Key Constraint error (Postgres error code 23503 usually, or message content)
+                const isFKError = error?.message?.includes('violates foreign key constraint') || error?.code === '23503';
+
+                if (isFKError) {
+                    if (window.confirm('No se puede eliminar el usuario porque tiene datos asociados (historial de trabajo).\n\n¿Quieres DESACTIVAR SU ACCESO en lugar de eliminarlo? (Recomendado)')) {
+                        handleStatusChange(userId);
+                    }
+                } else {
+                    alert('Error al eliminar usuario: ' + (error?.message || 'Error desconocido'));
+                }
             }
         }
     };
@@ -78,8 +120,20 @@ const AdminPage = () => {
     };
 
     const handleRoleChange = async (userId, currentRole) => {
-        const newRole = currentRole === 'admin' ? 'user' : 'admin';
-        if (window.confirm(`¿Cambiar rol de ${currentRole} a ${newRole}?`)) {
+        // Cycle: user -> admin -> superadmin -> user
+        let newRole = 'user';
+
+        // Logic for role cycling
+        if (!currentRole || currentRole === 'user') {
+            newRole = 'admin';
+        } else if (currentRole === 'admin') {
+            // Only Global Admin can promote to SuperAdmin
+            newRole = user.isGlobalAdmin ? 'superadmin' : 'user';
+        } else if (currentRole === 'superadmin') {
+            newRole = 'user';
+        }
+
+        if (window.confirm(`¿Cambiar rol de ${currentRole || 'user'} a ${newRole}?`)) {
             await updateUserRole(userId, newRole);
             fetchUsers();
         }
@@ -93,9 +147,9 @@ const AdminPage = () => {
         }
     };
 
-    const filteredUsers = filterCompanyId === 'all'
-        ? localUsers
-        : localUsers.filter(u => u.company_id === filterCompanyId);
+    const filteredUsers = (user.isGlobalAdmin && filterCompanyId !== 'all')
+        ? localUsers.filter(u => u.company_id === filterCompanyId)
+        : localUsers;
 
     const pendingUsers = filteredUsers.filter(u => !u.is_authorized);
     const authorizedUsers = filteredUsers.filter(u => u.is_authorized);
@@ -140,8 +194,16 @@ const AdminPage = () => {
                     <p className="text-slate-500 mt-1">Gestión centralizada de empresas, usuarios y mantenimiento.</p>
                 </div>
 
-                {/* Diagnostic Actions Bar */}
+                {/* Only Global Admin can see Diagnostic/Repair Tools */}
                 <div className="flex bg-white rounded-lg p-1 border border-slate-200 shadow-sm">
+                    <button
+                        onClick={() => setShowInviteModal(true)}
+                        className="flex items-center gap-2 px-3 py-2 text-sm font-bold text-white bg-brand-600 hover:bg-brand-700 rounded-md transition-colors shadow-sm"
+                        title="Invitar Nuevo Usuario"
+                    >
+                        <Send size={16} /> Invitar
+                    </button>
+                    <div className="w-px bg-slate-200 my-1 mx-1"></div>
                     <button
                         onClick={() => refreshData()}
                         className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-600 hover:text-brand-600 hover:bg-slate-50 rounded-md transition-colors"
@@ -149,141 +211,148 @@ const AdminPage = () => {
                     >
                         <RefreshCw size={16} /> Recargar
                     </button>
-                    <div className="w-px bg-slate-200 my-1 mx-1"></div>
-                    <button
-                        onClick={async () => {
-                            const res = await repairAdminProfile();
-                            alert(res.message);
-                        }}
-                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-600 hover:text-blue-600 hover:bg-slate-50 rounded-md transition-colors"
-                        title="Reparar Permisos"
-                    >
-                        <Wrench size={16} /> Permisos
-                    </button>
-                    <div className="w-px bg-slate-200 my-1 mx-1"></div>
-                    <button
-                        onClick={async () => {
-                            // Logic remains the same, just keeping the cleaner UI trigger
-                            try {
-                                const { supabase } = await import('../supabaseClient');
-                                const { data: orphanCards, error } = await supabase.from('five_s_cards').select('id, responsible').is('company_id', null);
-                                if (error) throw error;
-                                if (!orphanCards?.length) { alert('✅ No hay tarjetas 5S huérfanas.'); return; }
-                                const { data: profiles } = await supabase.from('profiles').select('name, company_id');
-                                const profileMap = {}; profiles?.forEach(p => { if (p.name && p.company_id) profileMap[p.name] = p.company_id; });
-                                let fixed = 0;
-                                for (const card of orphanCards) {
-                                    const cid = profileMap[card.responsible];
-                                    if (cid) { await supabase.from('five_s_cards').update({ company_id: cid }).eq('id', card.id); fixed++; }
-                                }
-                                alert(`✅ Reparación completada: ${fixed} tarjetas correjidas.`);
-                            } catch (err) { alert('Error: ' + err.message); }
-                        }}
-                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-600 hover:text-emerald-600 hover:bg-slate-50 rounded-md transition-colors"
-                        title="Reparar 5S"
-                    >
-                        <Activity size={16} /> Reparar 5S
-                    </button>
+
+                    {user.isGlobalAdmin && (
+                        <>
+                            <div className="w-px bg-slate-200 my-1 mx-1"></div>
+                            <button
+                                onClick={async () => {
+                                    const res = await repairAdminProfile();
+                                    alert(res.message);
+                                }}
+                                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-600 hover:text-blue-600 hover:bg-slate-50 rounded-md transition-colors"
+                                title="Reparar Permisos"
+                            >
+                                <Wrench size={16} /> Permisos
+                            </button>
+                            <div className="w-px bg-slate-200 my-1 mx-1"></div>
+                            <button
+                                onClick={async () => {
+                                    // Logic remains the same, just keeping the cleaner UI trigger
+                                    try {
+                                        const { supabase } = await import('../supabaseClient');
+                                        const { data: orphanCards, error } = await supabase.from('five_s_cards').select('id, responsible').is('company_id', null);
+                                        if (error) throw error;
+                                        if (!orphanCards?.length) { alert('✅ No hay tarjetas 5S huérfanas.'); return; }
+                                        const { data: profiles } = await supabase.from('profiles').select('name, company_id');
+                                        const profileMap = {}; profiles?.forEach(p => { if (p.name && p.company_id) profileMap[p.name] = p.company_id; });
+                                        let fixed = 0;
+                                        for (const card of orphanCards) {
+                                            const cid = profileMap[card.responsible];
+                                            if (cid) { await supabase.from('five_s_cards').update({ company_id: cid }).eq('id', card.id); fixed++; }
+                                        }
+                                        alert(`✅ Reparación completada: ${fixed} tarjetas correjidas.`);
+                                    } catch (err) { alert('Error: ' + err.message); }
+                                }}
+                                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-600 hover:text-emerald-600 hover:bg-slate-50 rounded-md transition-colors"
+                                title="Reparar 5S"
+                            >
+                                <Activity size={16} /> Reparar 5S
+                            </button>
+                        </>
+                    )}
                 </div>
             </div>
 
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
 
-                {/* SECTION: EMPRESAS (Left Column) */}
-                <div className="xl:col-span-1 space-y-6">
-                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                        <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-                            <h3 className="font-bold text-slate-700 flex items-center gap-2">
-                                <Building size={18} className="text-slate-400" />
-                                Empresas Registradas
-                            </h3>
-                            <span className="text-xs font-bold bg-white border border-slate-200 text-slate-500 px-2 py-1 rounded-full">
-                                {companies.length}
-                            </span>
-                        </div>
+                {/* SECTION: EMPRESAS (Left Column) - GLOBAL ADMIN ONLY */}
+                {user.isGlobalAdmin ? (
+                    <div className="xl:col-span-1 space-y-6">
+                        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                            <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+                                <h3 className="font-bold text-slate-700 flex items-center gap-2">
+                                    <Building size={18} className="text-slate-400" />
+                                    Empresas Registradas
+                                </h3>
+                                <span className="text-xs font-bold bg-white border border-slate-200 text-slate-500 px-2 py-1 rounded-full">
+                                    {companies.length}
+                                </span>
+                            </div>
 
-                        <div className="p-4 bg-slate-50 border-b border-slate-200">
-                            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Nueva Empresa</h4>
-                            <form onSubmit={handleAddCompany} className="flex flex-col gap-3">
-                                <input
-                                    type="text"
-                                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none"
-                                    placeholder="Nombre de la empresa"
-                                    value={newCompanyName}
-                                    onChange={(e) => setNewCompanyName(e.target.value)}
-                                />
-                                <div className="flex gap-2">
+                            <div className="p-4 bg-slate-50 border-b border-slate-200">
+                                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Nueva Empresa</h4>
+                                <form onSubmit={handleAddCompany} className="flex flex-col gap-3">
                                     <input
                                         type="text"
-                                        className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none"
-                                        placeholder="Dominio (ej: acme.com)"
-                                        value={newCompanyDomain}
-                                        onChange={(e) => setNewCompanyDomain(e.target.value)}
+                                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none"
+                                        placeholder="Nombre de la empresa"
+                                        value={newCompanyName}
+                                        onChange={(e) => setNewCompanyName(e.target.value)}
                                     />
-                                    <button
-                                        type="submit"
-                                        disabled={!newCompanyName.trim() || !newCompanyDomain.trim()}
-                                        className="bg-brand-600 text-white p-2 rounded-lg hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                    >
-                                        <Plus size={20} />
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
-
-                        <div className="max-h-[500px] overflow-y-auto custom-scrollbar">
-                            <ul className="divide-y divide-slate-100">
-                                {companies.map(comp => (
-                                    <li key={comp.id} className="p-4 hover:bg-slate-50 transition-colors flex justify-between items-center group">
-                                        <div>
-                                            <p className="font-semibold text-slate-800 text-sm">{comp.name}</p>
-                                            <p className="text-xs text-slate-500">{comp.domain || 'Sin dominio configurado'}</p>
-                                        </div>
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="text"
+                                            className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none"
+                                            placeholder="Dominio (ej: acme.com)"
+                                            value={newCompanyDomain}
+                                            onChange={(e) => setNewCompanyDomain(e.target.value)}
+                                        />
                                         <button
-                                            onClick={() => removeCompany(comp.id)}
-                                            className="text-slate-300 hover:text-rose-500 p-1.5 opacity-0 group-hover:opacity-100 transition-all"
-                                            title="Eliminar Empresa"
+                                            type="submit"
+                                            disabled={!newCompanyName.trim() || !newCompanyDomain.trim()}
+                                            className="bg-brand-600 text-white p-2 rounded-lg hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                         >
-                                            <Trash2 size={16} />
+                                            <Plus size={20} />
                                         </button>
-                                    </li>
-                                ))}
-                            </ul>
+                                    </div>
+                                </form>
+                            </div>
+
+                            <div className="max-h-[500px] overflow-y-auto custom-scrollbar">
+                                <ul className="divide-y divide-slate-100">
+                                    {companies.map(comp => (
+                                        <li key={comp.id} className="p-4 hover:bg-slate-50 transition-colors flex justify-between items-center group">
+                                            <div>
+                                                <p className="font-semibold text-slate-800 text-sm">{comp.name}</p>
+                                                <p className="text-xs text-slate-500">{comp.domain || 'Sin dominio configurado'}</p>
+                                            </div>
+                                            <button
+                                                onClick={() => removeCompany(comp.id)}
+                                                className="text-slate-300 hover:text-rose-500 p-1.5 opacity-0 group-hover:opacity-100 transition-all"
+                                                title="Eliminar Empresa"
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+
+                            <div className="p-3 bg-slate-50 border-t border-slate-200">
+                                <button
+                                    onClick={async () => {
+                                        const { generateTransportesDemoData } = await import('../utils/demoData');
+                                        generateTransportesDemoData(companies, addCompany);
+                                    }}
+                                    className="w-full py-2 text-xs font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 rounded-lg hover:bg-emerald-100 transition-colors"
+                                >
+                                    + Generar Datos Demo
+                                </button>
+                            </div>
                         </div>
 
-                        <div className="p-3 bg-slate-50 border-t border-slate-200">
+                        {/* Maintenance Zone moved to side column for better layout in large screens */}
+                        <div className="bg-red-50 rounded-xl border border-red-100 p-5">
+                            <h3 className="flex items-center gap-2 text-red-700 font-bold mb-2">
+                                <AlertTriangle size={18} /> Zona de Riesgo
+                            </h3>
+                            <p className="text-xs text-red-600 mb-4 leading-relaxed">
+                                Acciones destructivas para mantenimiento de la base de datos.
+                                Elimina registros huérfanos que no pertenecen a ninguna empresa.
+                            </p>
                             <button
-                                onClick={async () => {
-                                    const { generateTransportesDemoData } = await import('../utils/demoData');
-                                    generateTransportesDemoData(companies, addCompany);
-                                }}
-                                className="w-full py-2 text-xs font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 rounded-lg hover:bg-emerald-100 transition-colors"
+                                onClick={handlePurgeLegacyData}
+                                className="w-full py-2 bg-white border border-red-200 text-red-600 text-xs font-bold rounded-lg hover:bg-red-50 hover:border-red-300 transition-colors shadow-sm"
                             >
-                                + Generar Datos Demo
+                                Eliminar Datos Huerfanos
                             </button>
                         </div>
                     </div>
+                ) : null}
 
-                    {/* Maintenance Zone moved to side column for better layout in large screens */}
-                    <div className="bg-red-50 rounded-xl border border-red-100 p-5">
-                        <h3 className="flex items-center gap-2 text-red-700 font-bold mb-2">
-                            <AlertTriangle size={18} /> Zona de Riesgo
-                        </h3>
-                        <p className="text-xs text-red-600 mb-4 leading-relaxed">
-                            Acciones destructivas para mantenimiento de la base de datos.
-                            Elimina registros huérfanos que no pertenecen a ninguna empresa.
-                        </p>
-                        <button
-                            onClick={handlePurgeLegacyData}
-                            className="w-full py-2 bg-white border border-red-200 text-red-600 text-xs font-bold rounded-lg hover:bg-red-50 hover:border-red-300 transition-colors shadow-sm"
-                        >
-                            Eliminar Datos Huerfanos
-                        </button>
-                    </div>
-                </div>
-
-                {/* SECTION: USUARIOS (Right Column - Wider) */}
-                <div className="xl:col-span-2 space-y-6">
+                {/* SECTION: USUARIOS (Right Column - Wider) - EXPANDS if no left column */}
+                <div className={`${user.isGlobalAdmin ? 'xl:col-span-2' : 'col-span-3'} space-y-6`}>
                     <div className="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col min-h-[600px]">
                         <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                             <div>
@@ -294,20 +363,93 @@ const AdminPage = () => {
                                 <p className="text-sm text-slate-500 mt-1">Autoriza y administra el acceso al sistema</p>
                             </div>
 
-                            <div className="relative">
-                                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                                <select
-                                    value={filterCompanyId}
-                                    onChange={(e) => setFilterCompanyId(e.target.value)}
-                                    className="pl-9 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium text-slate-600 focus:ring-2 focus:ring-brand-500 outline-none appearance-none cursor-pointer hover:bg-slate-100 transition-colors min-w-[200px]"
-                                >
-                                    <option value="all">Todas las Empresas</option>
-                                    {companies.map(c => (
-                                        <option key={c.id} value={c.id}>{c.name}</option>
-                                    ))}
-                                </select>
-                            </div>
+                            {user.isGlobalAdmin && (
+                                <div className="relative">
+                                    <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                    <select
+                                        value={filterCompanyId}
+                                        onChange={(e) => setFilterCompanyId(e.target.value)}
+                                        className="pl-9 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium text-slate-600 focus:ring-2 focus:ring-brand-500 outline-none appearance-none cursor-pointer hover:bg-slate-100 transition-colors min-w-[200px]"
+                                    >
+                                        <option value="all">Todas las Empresas</option>
+                                        {companies.map(c => (
+                                            <option key={c.id} value={c.id}>{c.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
                         </div>
+
+                        {/* Invite Modal */}
+                        {showInviteModal && (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in">
+                                <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+                                    <div className="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center">
+                                        <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                                            <Send size={18} className="text-brand-600" />
+                                            Invitar Usuario
+                                        </h3>
+                                        <button
+                                            onClick={() => setShowInviteModal(false)}
+                                            className="text-slate-400 hover:text-slate-600 transition-colors"
+                                        >
+                                            <X size={20} />
+                                        </button>
+                                    </div>
+                                    <form onSubmit={handleInviteUser} className="p-6 space-y-4">
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nombre Completo</label>
+                                            <input
+                                                type="text"
+                                                required
+                                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 outline-none"
+                                                placeholder="Ej: Juan Pérez"
+                                                value={inviteName}
+                                                onChange={e => setInviteName(e.target.value)}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Correo Electrónico</label>
+                                            <input
+                                                type="email"
+                                                required
+                                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 outline-none"
+                                                placeholder="juan@empresa.com"
+                                                value={inviteEmail}
+                                                onChange={e => setInviteEmail(e.target.value)}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Empresa</label>
+                                            <select
+                                                required
+                                                disabled={!user.isGlobalAdmin}
+                                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 outline-none disabled:bg-slate-100 disabled:text-slate-500"
+                                                value={inviteCompanyId}
+                                                onChange={e => setInviteCompanyId(e.target.value)}
+                                            >
+                                                <option value="">Seleccionar empresa...</option>
+                                                {companies.map(c => (
+                                                    <option key={c.id} value={c.id}>{c.name}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="pt-2">
+                                            <button
+                                                type="submit"
+                                                disabled={!inviteName || !inviteEmail || !inviteCompanyId}
+                                                className="w-full py-2.5 bg-brand-600 text-white font-bold rounded-lg hover:bg-brand-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2"
+                                            >
+                                                <Send size={16} /> Enviar Invitación
+                                            </button>
+                                            <p className="text-[10px] text-slate-400 text-center mt-3">
+                                                El usuario recibirá un "Magic Link" para acceder sin contraseña inicialmente.
+                                            </p>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        )}
 
                         <div className="p-5 flex-1 bg-slate-50/30">
 
@@ -369,7 +511,9 @@ const AdminPage = () => {
                                                 <tr>
                                                     <th className="px-5 py-3">Usuario</th>
                                                     <th className="px-5 py-3 text-center">Rol</th>
-                                                    <th className="px-5 py-3">Empresa</th>
+                                                    {(user.role === 'superadmin' || user.email === 'ariel.mellag@gmail.com') && (
+                                                        <th className="px-5 py-3">Empresa</th>
+                                                    )}
                                                     <th className="px-5 py-3 text-right">Acciones</th>
                                                 </tr>
                                             </thead>
@@ -381,28 +525,34 @@ const AdminPage = () => {
                                                             <div className="text-xs text-slate-400">{u.email}</div>
                                                         </td>
                                                         <td className="px-5 py-3 text-center">
-                                                            <button
-                                                                onClick={() => handleRoleChange(u.id, u.role)}
-                                                                className={`px-2.5 py-1 rounded text-xs font-bold uppercase transition-all border ${u.role === 'admin'
-                                                                    ? 'bg-purple-50 text-purple-600 border-purple-200 hover:bg-purple-100'
-                                                                    : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
-                                                                    }`}
-                                                            >
-                                                                {u.role || 'user'}
-                                                            </button>
+                                                            {/* User Role can always be changed by superadmin/global admin */
+                                                                <button
+                                                                    onClick={() => handleRoleChange(u.id, u.role)}
+                                                                    className={`px-2.5 py-1 rounded text-xs font-bold uppercase transition-all border ${u.role === 'superadmin'
+                                                                        ? 'bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-200'
+                                                                        : u.role === 'admin'
+                                                                            ? 'bg-purple-50 text-purple-600 border-purple-200 hover:bg-purple-100'
+                                                                            : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
+                                                                        }`}
+                                                                >
+                                                                    {u.role === 'superadmin' ? 'Super Admin' : u.role || 'user'}
+                                                                </button>
+                                                            }
                                                         </td>
-                                                        <td className="px-5 py-3">
-                                                            <select
-                                                                value={u.company_id || ''}
-                                                                onChange={(e) => handleCompanyChange(u.id, e.target.value)}
-                                                                className="bg-transparent text-sm text-slate-600 border-none focus:ring-0 cursor-pointer hover:text-brand-600 font-medium py-0 pl-0"
-                                                            >
-                                                                <option value="" disabled>Seleccionar...</option>
-                                                                {companies.map(c => (
-                                                                    <option key={c.id} value={c.id}>{c.name}</option>
-                                                                ))}
-                                                            </select>
-                                                        </td>
+                                                        {(user.role === 'superadmin' || user.email === 'ariel.mellag@gmail.com') && (
+                                                            <td className="px-5 py-3">
+                                                                <select
+                                                                    value={u.company_id || ''}
+                                                                    onChange={(e) => handleCompanyChange(u.id, e.target.value)}
+                                                                    className="bg-transparent text-sm text-slate-600 border-none focus:ring-0 cursor-pointer hover:text-brand-600 font-medium py-0 pl-0"
+                                                                >
+                                                                    <option value="" disabled>Seleccionar...</option>
+                                                                    {companies.map(c => (
+                                                                        <option key={c.id} value={c.id}>{c.name}</option>
+                                                                    ))}
+                                                                </select>
+                                                            </td>
+                                                        )}
                                                         <td className="px-5 py-3 text-right flex justify-end gap-2">
                                                             <button
                                                                 onClick={() => handleStatusChange(u.id)}

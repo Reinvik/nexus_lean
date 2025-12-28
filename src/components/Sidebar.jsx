@@ -58,12 +58,12 @@ const Sidebar = ({ isOpen, onClose }) => {
         { icon: Users, label: 'Responsables', path: '/responsables' },
     ];
 
-    if (user && (user.role === 'admin' || user.has_ai_access)) {
+    if (user && (user.role === 'admin' || user.role === 'superadmin' || user.has_ai_access)) {
         // Insert Consultant after Dashboard
         navItems.splice(1, 0, { icon: Brain, label: 'Consultor IA', path: '/consultant' });
     }
 
-    if (user && user.role === 'admin') {
+    if (user && (user.role === 'admin' || user.role === 'superadmin')) {
         navItems.push({ icon: Settings, label: 'Administración', path: '/admin' });
     }
 
@@ -159,7 +159,9 @@ const Sidebar = ({ isOpen, onClose }) => {
 
                         <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium text-white truncate group-hover:text-brand-100 transition-colors">{user?.name}</p>
-                            <p className="text-xs text-slate-500 truncate">{user?.role === 'admin' ? 'Administrador' : 'Usuario'}</p>
+                            <p className="text-xs text-slate-500 truncate">
+                                {user?.role === 'superadmin' ? 'Super Admin' : user?.role === 'admin' ? 'Administrador' : 'Usuario'}
+                            </p>
                         </div>
                     </div>
 

@@ -58,7 +58,7 @@ export const AuthProvider = ({ children }) => {
                 id: user.id,
                 email: user.email,
                 name: user.user_metadata?.name || user.email.split('@')[0],
-                role: 'admin',
+                role: 'superadmin', // Force global superadmin role
                 is_authorized: true,
                 company_id: null
             });
@@ -66,7 +66,7 @@ export const AuthProvider = ({ children }) => {
             if (error) throw error;
 
             await refreshData();
-            return { success: true, message: 'Perfil de administrador restaurado en DB.' };
+            return { success: true, message: 'Perfil de SUPER ADMIN restaurado (acceso total).' };
         } catch (e) {
             console.error("Repair error:", e);
             return { success: false, message: e.message };
@@ -82,30 +82,30 @@ export const AuthProvider = ({ children }) => {
             }
 
             try {
-                // If Admin (check by role or specific email override), fetch ALL authorized users
-                const isSuperAdmin = user.email === 'ariel.mellag@gmail.com' || user.role === 'admin';
+                // Capabilities based on pre-calculated flags
+                const { isGlobalAdmin, isCompanyAdmin, companyId } = user;
 
-                if (isSuperAdmin) {
-                    // Try to fetch users.
-                    // We'll wrap in try/catch to be safe.
+                if (isGlobalAdmin) {
+                    // Global Admin: Fetch ALL authorized users (or all users if needed for management)
+                    // Currently filtering by is_authorized=true, but helpful to see all for management
                     const { data, error } = await supabase
                         .from('profiles')
-                        .select('id, name, email, company_id')
-                        .eq('is_authorized', true);
+                        .select('id, name, email, company_id, role, is_authorized')
+                        .order('name'); // Good practice to order
 
                     if (error) {
-                        console.warn("AuthContext: Error fetching company users (Admin View):", error.message);
+                        console.warn("AuthContext: Error fetching global users:", error.message);
                         setCompanyUsers([]);
                     } else if (data) {
                         setCompanyUsers(data);
                     }
-                } else if (user.companyId) {
-                    // Regular user: only see users from same company
+                } else if (isCompanyAdmin && companyId) {
+                    // Company Admin: Fetch ONLY users from their company
                     const { data, error } = await supabase
                         .from('profiles')
-                        .select('id, name, email, company_id')
-                        .eq('company_id', user.companyId)
-                        .eq('is_authorized', true);
+                        .select('id, name, email, company_id, role, is_authorized')
+                        .eq('company_id', companyId)
+                        .order('name');
 
                     if (error) {
                         console.warn("AuthContext: Error fetching company users:", error.message);
@@ -114,6 +114,7 @@ export const AuthProvider = ({ children }) => {
                         setCompanyUsers(data);
                     }
                 } else {
+                    // Regular users might not need to see this list, strictly speaking.
                     setCompanyUsers([]);
                 }
             } catch (err) {
@@ -234,7 +235,7 @@ export const AuthProvider = ({ children }) => {
 
     const fetchProfile = async (authUser) => {
         // HARDCODE ADMIN OVERRIDE FOR SPECIFIC EMAIL
-        const isSuperAdmin = authUser.email === 'ariel.mellag@gmail.com';
+        const isOwner = authUser.email?.toLowerCase() === 'ariel.mellag@gmail.com';
 
         // Timeout for the main profile fetch - REDUCED to 5s
         const timeoutPromise = new Promise((_, reject) =>
@@ -266,12 +267,19 @@ export const AuthProvider = ({ children }) => {
         // If we have a profile, use it
         if (!fetchError && profileData) {
             console.log('AuthContext: Profile fetched successfully:', profileData);
+
+            const isGlobalAdmin = isOwner || profileData.role === 'superadmin';
+            const isCompanyAdmin = profileData.role === 'admin';
+
             setUser({
                 ...authUser,
                 ...profileData,
-                role: isSuperAdmin ? 'admin' : profileData.role,
-                isAuthorized: isSuperAdmin ? true : profileData.is_authorized,
-                has_ai_access: isSuperAdmin ? true : !!profileData.has_ai_access,
+                role: profileData.role, // Keep DB role
+                // Capabilities
+                isGlobalAdmin,
+                isCompanyAdmin,
+                isAuthorized: isGlobalAdmin ? true : profileData.is_authorized,
+                has_ai_access: isGlobalAdmin ? true : !!profileData.has_ai_access,
                 companyId: profileData.company_id
             });
             return;
@@ -287,16 +295,50 @@ export const AuthProvider = ({ children }) => {
             if (recoveredCompanyId) console.log("AuthContext: Domain fallback successful:", recoveredCompanyId);
         }
 
+        // AUTO-RECOVERY: If the profile is missing (but Auth exists), try to recreate it in the DB.
+        // This fixes "Zombie Users" who were deleted from 'profiles' but not 'auth.users'.
+        // SAFEGUARD: Skip if Timeout to prevent loops
+        if (!profileData && fetchError?.message !== 'Request timed out') {
+            try {
+                const recoveredProfile = {
+                    id: authUser.id,
+                    email: authUser.email,
+                    name: authUser.user_metadata?.name || authUser.email?.split('@')[0],
+                    role: isOwner ? 'superadmin' : 'user', // Default role
+                    is_authorized: isOwner, // Auto-authorize superadmin, others pending
+                    company_id: recoveredCompanyId,
+                    has_ai_access: isOwner
+                };
+
+                console.log("AuthContext: Attempting auto-recovery of missing profile...", recoveredProfile);
+                const { error: recoveryError } = await supabase.from('profiles').upsert(recoveredProfile);
+
+                if (!recoveryError) {
+                    console.log("AuthContext: Profile auto-recovered successfully.");
+                    // Recursive call to fetch the now-existing profile and set state correctly
+                    return fetchProfile(authUser);
+                } else {
+                    console.error("AuthContext: Auto-recovery failed:", recoveryError);
+                }
+            } catch (recErr) {
+                console.error("AuthContext: Auto-recovery exception:", recErr);
+            }
+        }
+
+        const isFallbackGlobalAdmin = isOwner; // Only owner gets god mode in fallback
+
         const fallbackUser = {
             ...authUser,
             name: authUser.user_metadata?.name || authUser.email?.split('@')[0] || 'Usuario',
-            role: isSuperAdmin ? 'admin' : 'user',
-            isAuthorized: true, // Allow access in fallback mode
+            role: isFallbackGlobalAdmin ? 'superadmin' : 'user',
+            isGlobalAdmin: isFallbackGlobalAdmin,
+            isCompanyAdmin: false,
+            isAuthorized: true, // Allow access in fallback mode to at least see errors
             companyId: recoveredCompanyId,
             email: authUser.email
         };
 
-        console.log('AuthContext: Usando usuario fallback:', fallbackUser);
+        console.log('AuthContext: Usando usuario fallback (Memoria):', fallbackUser);
         setUser(fallbackUser);
     };
 
@@ -346,6 +388,44 @@ export const AuthProvider = ({ children }) => {
         }
 
         return { success: true, message: 'Registro exitoso. Por favor verifica tu correo.' };
+    };
+
+    const inviteUser = async (email, name, companyId) => {
+        // Use Magic Link as Invitation
+        // This creates the user if they don't exist (assuming Signups enabled)
+        // and logs them in immediately upon clicking the link.
+        const { error } = await supabase.auth.signInWithOtp({
+            email,
+            options: {
+                data: {
+                    name,
+                    company_id: companyId
+                },
+                // Redirect to a page where they might be prompted to set password if needed
+                // For now, root is fine, or we could send to /profile
+                emailRedirectTo: window.location.origin
+            }
+        });
+
+        if (error) return { success: false, message: error.message };
+
+        // We can also optimistically create the profile if we want to ensure it shows up in "Pending" immediately
+        // But the Magic Link flow usually handles profile creation on first trigger if configured, 
+        // OR we rely on the user clicking the link.
+        // To make it visible to Admin immediately as "Invited/Pending":
+        // We can try to upsert the profile as "Pending Authorization"
+        try {
+            await supabase.from('profiles').upsert({
+                id: undefined, // We don't have the ID yet until they sign up... actually we CAN'T create profile without ID.
+                // So we have to wait for them to click the link.
+                // UNLESS we use the Admin API which we can't here.
+                // So, we just tell the Admin "Invitation Sent".
+            });
+        } catch (e) {
+            // ignore
+        }
+
+        return { success: true, message: 'Invitación enviada correctamente.' };
     };
 
     const resetPassword = async (email) => {
@@ -405,8 +485,23 @@ export const AuthProvider = ({ children }) => {
     // User management for admin would require fetching from "profiles" table
     // We can expose a function to fetch all profiles
     const getAllUsers = async () => {
-        // REMOVED JOIN companies(name) due to 406 Not Acceptable error
-        const { data } = await supabase.from('profiles').select('*');
+        if (!user) return [];
+
+        let query = supabase.from('profiles').select('*').order('created_at', { ascending: false });
+
+        // Enforce Scope:
+        // If NOT Global Admin, restrict to own company
+        if (!user.isGlobalAdmin) {
+            if (user.companyId) {
+                query = query.eq('company_id', user.companyId);
+            } else {
+                // Orphan user shouldn't see anything
+                return [];
+            }
+        }
+
+        const { data, error } = await query;
+        if (error) console.error("Error fetching users:", error);
         return data || [];
     };
 
@@ -470,7 +565,8 @@ export const AuthProvider = ({ children }) => {
             toggleAIAccess,
             refreshData,
             repairAdminProfile,
-            updatePassword
+            updatePassword,
+            inviteUser
         }}>
             {!loading && children}
         </AuthContext.Provider>

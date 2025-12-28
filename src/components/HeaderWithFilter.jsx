@@ -4,8 +4,8 @@ import { useAuth } from '../context/AuthContext';
 const HeaderWithFilter = ({ title, subtitle, children }) => {
     const { user, companies, globalFilterCompanyId, setGlobalFilterCompanyId } = useAuth();
 
-    // Check if user is SuperAdmin (safe fallback)
-    const isAdmin = user && (user.role === 'admin' || user.email === 'ariel.mellag@gmail.com');
+    // Check if user is SuperAdmin (only they can see global filter)
+    const isAdmin = user && (user.role === 'superadmin' || user.email === 'ariel.mellag@gmail.com');
 
     return (
         <header className="page-header flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b border-gray-100 pb-4">
