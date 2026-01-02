@@ -1,20 +1,23 @@
 import { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, ClipboardList, FileText, Activity, Zap, ShieldCheck, Settings, Users, LogOut, Camera, X, Brain } from 'lucide-react';
+import { LayoutDashboard, ClipboardList, FileText, Activity, Zap, ShieldCheck, Settings, Users, User, LogOut, Camera, X, Brain } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../supabaseClient';
 import ImageUpload from './ImageUpload';
 
 const Sidebar = ({ isOpen, onClose }) => {
-    const { user, logout } = useAuth();
+    const { user, logout, updatePassword, updateProfileName } = useAuth();
     const [avatarUrl, setAvatarUrl] = useState(null);
     const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
+
+    // Name Change State
+    const [name, setName] = useState('');
+    const [nameLoading, setNameLoading] = useState(false);
 
     // Password Change State
     const [newPassword, setNewPassword] = useState('');
     const [confirmNewPassword, setConfirmNewPassword] = useState('');
     const [passwordLoading, setPasswordLoading] = useState(false);
-    const { updatePassword } = useAuth(); // Assuming updatePassword is exposed in context
 
     useEffect(() => {
         const fetchAvatar = async () => {
@@ -38,6 +41,12 @@ const Sidebar = ({ isOpen, onClose }) => {
         }
     }, [user]);
 
+    useEffect(() => {
+        if (user?.name) {
+            setName(user.name);
+        }
+    }, [user]);
+
     const handleAvatarUpdate = async (url) => {
         try {
             const { error } = await supabase
@@ -51,6 +60,21 @@ const Sidebar = ({ isOpen, onClose }) => {
         } catch (error) {
             console.error('Error updating avatar:', error);
             alert('Error actualizando imagen de perfil');
+        }
+    };
+
+    const handleNameChange = async (e) => {
+        e.preventDefault();
+        if (!name.trim()) return;
+
+        setNameLoading(true);
+        const { success, message } = await updateProfileName(name);
+        setNameLoading(false);
+
+        if (success) {
+            alert('Nombre actualizado correctamente');
+        } else {
+            alert('Error al actualizar nombre: ' + message);
         }
     };
 
@@ -116,13 +140,14 @@ const Sidebar = ({ isOpen, onClose }) => {
                 `}
             >
                 {/* Header / Logo */}
-                <div className="h-16 flex items-center justify-between px-6 border-b border-sidebar-border bg-sidebar/50 backdrop-blur-sm">
-                    <div className="flex items-center gap-3">
-                        <img src="/nexus-logo.svg" alt="Nexus Logo" className="w-10 h-10 object-contain drop-shadow-md hover:scale-105 transition-transform duration-300" />
-                        <div>
-                            <h1 className="text-lg font-bold text-white tracking-tight leading-none">Nexus</h1>
-                            <span className="text-xs font-medium text-brand-500 tracking-wider">BE LEAN</span>
-                        </div>
+                <div className="h-24 flex items-center justify-between px-6 border-b border-sidebar-border bg-sidebar/50 backdrop-blur-sm">
+                    <div className="flex items-center justify-center w-full px-2">
+                        {/* Using Python-processed logo with real transparency and white text */}
+                        <img
+                            src="/be-lean-logo-white.png"
+                            alt="Be Lean"
+                            className="h-20 object-contain hover:scale-105 transition-transform duration-300 drop-shadow-md"
+                        />
                     </div>
                     {/* Mobile Close Button */}
                     <button onClick={onClose} className="md:hidden text-slate-400 hover:text-white">
@@ -242,6 +267,31 @@ const Sidebar = ({ isOpen, onClose }) => {
                                         ))}
                                     </div>
                                 </div>
+
+                                <hr className="my-6 border-slate-100" />
+
+                                <h4 className="text-sm font-bold text-slate-700 mb-4 flex items-center gap-2">
+                                    <User size={16} className="text-brand-500" /> Información Personal
+                                </h4>
+
+                                <form onSubmit={handleNameChange} className="space-y-4 mb-6">
+                                    <div>
+                                        <input
+                                            type="text"
+                                            placeholder="Nombre Completo"
+                                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all font-medium"
+                                            value={name}
+                                            onChange={(e) => setName(e.target.value)}
+                                        />
+                                    </div>
+                                    <button
+                                        type="submit"
+                                        disabled={!name || name === user?.name || nameLoading}
+                                        className="w-full py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-900 transition-colors text-xs font-bold uppercase tracking-wider disabled:opacity-50"
+                                    >
+                                        {nameLoading ? 'Actualizando...' : 'Actualizar Nombre'}
+                                    </button>
+                                </form>
 
                                 <hr className="my-6 border-slate-100" />
 

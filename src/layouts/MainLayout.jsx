@@ -11,8 +11,7 @@ const MainLayout = () => {
             {/* Mobile Header */}
             <div className="md:hidden bg-sidebar text-white h-16 flex items-center justify-between px-4 shrink-0 z-30 shadow-md">
                 <div className="flex items-center gap-2">
-                    <img src="/nexus-logo.svg" alt="Nexus" className="w-8 h-8" />
-                    <span className="font-bold tracking-tight">Nexus BE LEAN</span>
+                    <img src="/be-lean-logo-white.png" alt="Be Lean" className="w-auto h-8" />
                 </div>
                 <button
                     onClick={() => setIsSidebarOpen(true)}

@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../supabaseClient';
 import HeaderWithFilter from '../components/HeaderWithFilter';
@@ -10,6 +11,8 @@ import StatCard from '../components/StatCard';
 const Dashboard = () => {
     const { user, globalFilterCompanyId } = useAuth();
     const [data, setData] = useState({ fiveS: [], quickWins: [], vsms: [], a3: [] });
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
     const [isFullScreen, setIsFullScreen] = useState(false);
 
     const toggleFullScreen = () => {
@@ -64,6 +67,8 @@ const Dashboard = () => {
     useEffect(() => {
         const loadData = async () => {
             if (!user) return;
+            setLoading(true);
+            setError(null);
             // console.time("DashboardLoad");
 
             try {
@@ -75,7 +80,8 @@ const Dashboard = () => {
                 // Since we can't do "GROUP BY" easily in client-side Supabase without RPC, 
                 // we'll compromise: Fetch ID and STATUS columns only. This is very light.
 
-                const isAdmin = user.role === 'admin' || user.role === 'superadmin' || user.email === 'ariel.mellag@gmail.com';
+                // STRICT PERMISSION CHECK: usage of 'isGlobalAdmin' from AuthContext
+                const isAdmin = user.isGlobalAdmin;
 
                 // Helper to apply company filter if not "all" (for superadmin)
                 // For normal users, RLS handles it. For Superadmin, if they selected a company, we filter.
@@ -178,6 +184,9 @@ const Dashboard = () => {
 
             } catch (error) {
                 console.error("Error loading dashboard data:", error);
+                setError(error.message || "Error de conexión");
+            } finally {
+                setLoading(false);
             }
         };
         loadData();
@@ -187,13 +196,14 @@ const Dashboard = () => {
     const filteredData = useMemo(() => {
         if (!user) return { fiveS: [], quickWins: [], vsms: [], a3: [] };
 
-        const isAdmin = user.role === 'admin' || user.role === 'superadmin' || user.email === 'ariel.mellag@gmail.com';
+        // STRICT PERMISSION CHECK: usage of 'isGlobalAdmin' from AuthContext
+        const isAdmin = user.isGlobalAdmin;
         const targetCompanyId = isAdmin ? globalFilterCompanyId : user.companyId;
 
         const filterByCompany = (items) => {
             if (!Array.isArray(items)) return [];
             if (targetCompanyId === 'all') return items;
-            return items.filter(item => item.companyId && item.companyId === targetCompanyId);
+            return items.filter(item => item.companyId && item.companyId == targetCompanyId);
         };
 
         return {
@@ -213,20 +223,32 @@ const Dashboard = () => {
         const fiveSInProcess = fiveS.filter(i => i.status === 'En Proceso').length;
         const fiveSCompletion = fiveSTotal > 0 ? Math.round((fiveSClosed / fiveSTotal) * 100) : 0;
 
-        // Calculate Average Closure Time
+        // Calculate Average, Min, Max Closure Time
         const closedCards = fiveS.filter(c => c.status === 'Cerrado' && c.date && c.solutionDate);
         let totalDays = 0;
+        let minDays = null;
+        let maxDays = null;
+
         closedCards.forEach(c => {
             const start = new Date(c.date);
             const end = new Date(c.solutionDate);
             if (!isNaN(start) && !isNaN(end)) {
-                // Difference in days
+                // Difference in milliseconds
                 const diffTime = Math.abs(end - start);
-                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                totalDays += diffDays;
+                // Convert to days (float for precision during sum, we can round later if needed, but usually 1 decimal is good)
+                // Use Math.max(0, ...) to avoid negative if dates are swapped
+                const days = Math.max(0, diffTime / (1000 * 60 * 60 * 24));
+
+                totalDays += days;
+
+                if (minDays === null || days < minDays) minDays = days;
+                if (maxDays === null || days > maxDays) maxDays = days;
             }
         });
+
         const avgClosureDays = closedCards.length > 0 ? (totalDays / closedCards.length).toFixed(1) : 0;
+        const fastestClosure = minDays !== null ? minDays.toFixed(1) : 0;
+        const slowestClosure = maxDays !== null ? maxDays.toFixed(1) : 0;
 
 
         const winsDone = quickWins.filter(i => i.status === 'done').length;
@@ -257,7 +279,9 @@ const Dashboard = () => {
                 pending: fiveSPending,
                 inProcess: fiveSInProcess,
                 rate: fiveSCompletion,
-                avgClosure: avgClosureDays
+                avgClosure: avgClosureDays,
+                minClosure: fastestClosure,
+                maxClosure: slowestClosure
             },
             quickWins: { total: winsTotal, done: winsDone, impact: winsImpact },
             vsm: { count: vsmCount },
@@ -337,8 +361,26 @@ const Dashboard = () => {
 
     if (!user) return <div className="flex h-screen items-center justify-center text-slate-400">Cargando...</div>;
 
+    if (error) {
+        return (
+            <div className="flex flex-col h-[50vh] items-center justify-center text-slate-500 space-y-4">
+                <div className="p-4 bg-red-50 text-red-600 rounded-full">
+                    <Zap size={32} />
+                </div>
+                <h3 className="text-xl font-bold text-slate-700">No pudimos cargar los datos</h3>
+                <p className="max-w-md text-center text-sm">{error}</p>
+                <button
+                    onClick={() => window.location.reload()}
+                    className="px-4 py-2 bg-brand-600 text-white rounded-lg font-bold hover:bg-brand-700 transition-colors"
+                >
+                    Reintentar
+                </button>
+            </div>
+        );
+    }
+
     return (
-        <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500 pb-12">
+        <div className={`max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500 pb-12 ${loading ? 'opacity-70 pointer-events-none' : ''}`}>
             <div className="flex flex-col xl:flex-row justify-between xl:items-end gap-4">
                 <div className="flex-1 w-full">
                     <HeaderWithFilter
@@ -357,38 +399,46 @@ const Dashboard = () => {
 
             {/* Top Stats Row */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <StatCard
-                    title="Tarjetas 5S"
-                    value={metrics.fiveS.total}
-                    subtitle={`${metrics.fiveS.rate}% Cumplimiento`}
-                    icon={<ClipboardList />}
-                    variant="red"
-                    type="solid"
-                />
-                <StatCard
-                    title="Quick Wins"
-                    value={metrics.quickWins.done}
-                    subtitle={`de ${metrics.quickWins.total} Ideas Registradas`}
-                    icon={<Zap size={28} />}
-                    variant="yellow"
-                    type="solid"
-                />
-                <StatCard
-                    title="Mapas VSM"
-                    value={metrics.vsm.count}
-                    subtitle="Flujos de Valor Analizados"
-                    icon={<Activity size={28} />}
-                    variant="purple"
-                    type="solid"
-                />
-                <StatCard
-                    title="Impacto Alto"
-                    value={metrics.quickWins.impact}
-                    subtitle="Mejoras de Alto Impacto"
-                    icon={<Target size={28} />}
-                    variant="green"
-                    type="solid"
-                />
+                <Link to="/5s" className="block transform transition-transform hover:scale-105 active:scale-95">
+                    <StatCard
+                        title="Tarjetas 5S"
+                        value={metrics.fiveS.total}
+                        subtitle={`${metrics.fiveS.rate}% Cumplimiento`}
+                        icon={<ClipboardList />}
+                        variant="red"
+                        type="solid"
+                    />
+                </Link>
+                <Link to="/quick-wins" className="block transform transition-transform hover:scale-105 active:scale-95">
+                    <StatCard
+                        title="Quick Wins"
+                        value={metrics.quickWins.done}
+                        subtitle={`de ${metrics.quickWins.total} Ideas Registradas`}
+                        icon={<Zap size={28} />}
+                        variant="yellow"
+                        type="solid"
+                    />
+                </Link>
+                <Link to="/vsm" className="block transform transition-transform hover:scale-105 active:scale-95">
+                    <StatCard
+                        title="Mapas VSM"
+                        value={metrics.vsm.count}
+                        subtitle="Flujos de Valor Analizados"
+                        icon={<Activity size={28} />}
+                        variant="purple"
+                        type="solid"
+                    />
+                </Link>
+                <Link to="/a3" className="block transform transition-transform hover:scale-105 active:scale-95">
+                    <StatCard
+                        title="Impacto Alto"
+                        value={metrics.quickWins.impact}
+                        subtitle="Mejoras de Alto Impacto"
+                        icon={<Target size={28} />}
+                        variant="green"
+                        type="solid"
+                    />
+                </Link>
             </div>
 
             {/* Dashboard Main Content Grid */}
@@ -668,8 +718,20 @@ const Dashboard = () => {
                         <CheckCircle size={180} className="text-emerald-500" />
                     </div>
 
-                    <div className="text-center z-10 mt-auto">
-                        <p className="text-xs text-slate-400 font-medium px-4 leading-relaxed">
+                    {/* NEW COMPARISON FOOTER */}
+                    <div className="z-10 mt-auto w-full px-2">
+                        <div className="flex justify-between items-center bg-slate-50 rounded-lg p-2 text-xs">
+                            <div className="text-center">
+                                <p className="text-slate-400 font-bold uppercase text-[10px]">Más Rápida</p>
+                                <p className="text-emerald-600 font-bold">{metrics.fiveS.minClosure} <span className="text-[10px]">días</span></p>
+                            </div>
+                            <div className="h-6 w-px bg-slate-200"></div>
+                            <div className="text-center">
+                                <p className="text-slate-400 font-bold uppercase text-[10px]">Más Lenta</p>
+                                <p className="text-rose-600 font-bold">{metrics.fiveS.maxClosure} <span className="text-[10px]">días</span></p>
+                            </div>
+                        </div>
+                        <p className="text-[10px] text-slate-400 font-medium text-center mt-2 leading-tight">
                             Tiempo promedio desde la detección<br />hasta el cierre del hallazgo.
                         </p>
                     </div>

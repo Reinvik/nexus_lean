@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { Lock, ArrowRight, Loader2, Check } from 'lucide-react';
 
 const ResetPasswordPage = () => {
@@ -10,7 +10,29 @@ const ResetPasswordPage = () => {
     const [message, setMessage] = useState('');
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const location = useLocation();
+
     const navigate = useNavigate();
+
+    // Check for hash parameters for errors (Supabase redirect behavior)
+    useEffect(() => {
+        const hash = window.location.hash;
+        if (hash) {
+            const params = new URLSearchParams(hash.substring(1)); // Remove the #
+            const errorDescription = params.get('error_description');
+            const errorCode = params.get('error_code');
+            const errorMsg = params.get('error');
+
+            if (errorDescription || errorMsg) {
+                // If token expired, give specific guidance
+                if (errorCode === 'otp_expired' || errorDescription?.includes('expired')) {
+                    setError('El enlace de recuperación ha expirado. Por favor solicita uno nuevo.');
+                } else {
+                    setError(decodeURIComponent(errorDescription || errorMsg).replace(/\+/g, ' '));
+                }
+            }
+        }
+    }, [location]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();

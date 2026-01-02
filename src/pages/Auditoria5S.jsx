@@ -40,18 +40,20 @@ const DEFAULT_QUESTIONS = {
 };
 
 const Auditoria5S = () => {
-    const { user, globalFilterCompanyId } = useAuth();
+    const { user, globalFilterCompanyId, companies } = useAuth();
     const [view, setView] = useState('dashboard'); // 'dashboard', 'form'
     const [audits, setAudits] = useState([]);
     const [loading, setLoading] = useState(true);
     const [offlineAudits, setOfflineAudits] = useState([]);
     const [isSyncing, setIsSyncing] = useState(false);
 
+    const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+
     // Fixed Configuration (removed user controls per request)
     const chartConfig = {
         granularity: 'month',
         valueUnit: 'number', // Changed from 'percent' per request (0-5 scale)
-        yearFilter: new Date().getFullYear(),
+        yearFilter: selectedYear,
     };
 
     // Form State
@@ -62,6 +64,7 @@ const Auditoria5S = () => {
         date: new Date().toISOString().split('T')[0],
         entries: {}
     });
+    const [selectedCompanyId, setSelectedCompanyId] = useState('');
     const [expandedSection, setExpandedSection] = useState('S1');
     const [editingId, setEditingId] = useState(null);
     const [availableAuditors, setAvailableAuditors] = useState([]);
@@ -73,6 +76,11 @@ const Auditoria5S = () => {
             const localAudits = await offlineService.getAllAudits();
             setOfflineAudits(localAudits);
 
+            // Filter by Year directly on Server (Performance Optimization)
+            const year = chartConfig.yearFilter;
+            const startDate = `${year}-01-01`;
+            const endDate = `${year}-12-31`;
+
             // Fetch Online Audits
             let query = supabase
                 .from('audit_5s')
@@ -80,13 +88,20 @@ const Auditoria5S = () => {
                     *,
                     audit_5s_entries (*)
                 `)
+                .gte('audit_date', startDate)
+                .lte('audit_date', endDate)
                 .order('audit_date', { ascending: false });
 
             // Apply Company Filter
-            if (user?.role !== 'admin') {
+            // STRICT PERMISSION CHECK: usage of 'isGlobalAdmin' from AuthContext
+            if (user?.isGlobalAdmin) {
+                if (globalFilterCompanyId && globalFilterCompanyId !== 'all') {
+                    query = query.eq('company_id', globalFilterCompanyId);
+                }
+            } else {
+                // Non-global admins/users MUST see their own company (or nothing if no company)
                 if (user.company_id) query = query.eq('company_id', user.company_id);
-            } else if (globalFilterCompanyId && globalFilterCompanyId !== 'all') {
-                query = query.eq('company_id', globalFilterCompanyId);
+                else if (user.companyId) query = query.eq('company_id', user.companyId); // Fallback
             }
 
             const { data, error } = await query;
@@ -98,14 +113,14 @@ const Auditoria5S = () => {
         } finally {
             setLoading(false);
         }
-    }, [user, globalFilterCompanyId]);
+    }, [user, globalFilterCompanyId, chartConfig.yearFilter]);
 
     // Fetch Audits
     useEffect(() => {
         if (user) {
             fetchAudits();
         }
-    }, [user, globalFilterCompanyId, fetchAudits]);
+    }, [user, globalFilterCompanyId, chartConfig.yearFilter, fetchAudits]);
 
     const handleSyncAudits = async () => {
         setIsSyncing(true);
@@ -122,12 +137,23 @@ const Auditoria5S = () => {
                     delete payload.entries;
 
                     // Ensure company_id
-                    const targetCompanyId = user.role === 'admin' && globalFilterCompanyId !== 'all' ? globalFilterCompanyId : (user.company_id || user.companyId);
-                    payload.company_id = targetCompanyId || user.companyId;
+                    // Ensure company_id: Prioritize offline data, then valid session data
+                    // STRICT CHECK: Only Global Admins can use globalFilterCompanyId
+                    const isGlobalAdmin = user?.isGlobalAdmin;
+                    const sessionCompanyId = isGlobalAdmin && globalFilterCompanyId !== 'all' ? globalFilterCompanyId : (user.company_id || user.companyId);
+
+                    // Critical Fix: Remove camelCase companyId if present to avoid 406/400 errors
+                    if ('companyId' in payload) delete payload.companyId;
+
+                    payload.company_id = payload.company_id || sessionCompanyId;
 
                     if (!payload.company_id) {
-                        console.error("Missing company_id for sync", audit);
-                        continue;
+                        console.error("Missing company_id for sync (Audit)", audit);
+                        // Try to use user.companyId as last resort even if logic above failed (redundant but safe)
+                        if (user.companyId) payload.company_id = user.companyId;
+                        else {
+                            continue; // Skip if absolutely no ID found
+                        }
                     }
 
                     // Insert Audit
@@ -186,12 +212,16 @@ const Auditoria5S = () => {
             try {
                 let query = supabase.from('profiles').select('id, name, email');
 
-                // If user is admin and a specific company is selected, filter by that company
-                // If user is not admin, filter by their own company
-                if (user?.role !== 'admin') {
+                // If user is GLOBAL admin and a specific company is selected, filter by that company
+                // If user is not global admin, filter by their own company
+                // STRICT CHECK: user.isGlobalAdmin
+                if (user?.isGlobalAdmin) {
+                    if (globalFilterCompanyId && globalFilterCompanyId !== 'all') {
+                        query = query.eq('company_id', globalFilterCompanyId);
+                    }
+                } else {
                     if (user.company_id) query = query.eq('company_id', user.company_id);
-                } else if (globalFilterCompanyId && globalFilterCompanyId !== 'all') {
-                    query = query.eq('company_id', globalFilterCompanyId);
+                    else if (user.companyId) query = query.eq('company_id', user.companyId);
                 }
 
                 const { data, error } = await query;
@@ -210,18 +240,33 @@ const Auditoria5S = () => {
     const initForm = (existingAudit = null) => {
         if (existingAudit) {
             const entries = {};
-            existingAudit.audit_5s_entries.forEach(entry => {
-                if (!entries[entry.section]) entries[entry.section] = [];
-                entries[entry.section].push(entry);
-            });
-            setAuditData({
-                title: existingAudit.title || '',
-                area: existingAudit.area,
-                auditor: existingAudit.auditor,
-                date: existingAudit.audit_date,
-                entries: entries
-            });
-            setEditingId(existingAudit.id);
+            // Check if it's a draft (has data property) or a online audit
+            const sourceEntries = existingAudit.data ? existingAudit.data.entries : existingAudit.audit_5s_entries;
+
+            // If it's a draft, entries is an object {S1:[], S2:[]}, if online it's array of objects
+            if (existingAudit.data) {
+                // Draft format logic
+                setAuditData({
+                    ...existingAudit.data,
+                    tempId: existingAudit.tempId // Track that we are editing a draft
+                });
+                setEditingId(null); // It's not an online ID yet
+            } else {
+                // Online format logic
+                existingAudit.audit_5s_entries.forEach(entry => {
+                    if (!entries[entry.section]) entries[entry.section] = [];
+                    entries[entry.section].push(entry);
+                });
+
+                setAuditData({
+                    title: existingAudit.title || '',
+                    area: existingAudit.area,
+                    auditor: existingAudit.auditor,
+                    date: existingAudit.audit_date,
+                    entries: entries
+                });
+                setEditingId(existingAudit.id);
+            }
         } else {
             // New Audit - Load Templates
             const entries = {};
@@ -294,12 +339,59 @@ const Auditoria5S = () => {
         return totalCount > 0 ? parseFloat((totalSum / totalCount).toFixed(2)) : 0;
     };
 
+    const handleSaveLocal = async () => {
+        try {
+            const totalScore = calculateScore();
+            const auditToSave = {
+                ...auditData,
+                total_score: totalScore,
+                updatedAt: new Date().toISOString()
+            };
+
+            // If we are editing a draft, update it (delete old, save new or assume saveAudit handles new tempId)
+            // Ideally we'd update, but saveAudit generates new tempId. 
+            // Let's simple delete old draft if exists and save new.
+            if (auditData.tempId) {
+                await offlineService.deleteAudit(auditData.tempId);
+            }
+
+            // Ensure company_id is captured if available
+            // STRICT CHECK: user.isGlobalAdmin
+            const sessionCompanyId = user.isGlobalAdmin && globalFilterCompanyId !== 'all' ? globalFilterCompanyId : (user.company_id || user.companyId);
+            if (sessionCompanyId) auditToSave.company_id = sessionCompanyId;
+
+            await offlineService.saveAudit(auditToSave);
+            alert('Borrador guardado localmente.');
+
+            // Refresh local list and go back
+            const localAudits = await offlineService.getAllAudits();
+            setOfflineAudits(localAudits);
+            setView('dashboard');
+        } catch (error) {
+            console.error("Error saving local draft:", error);
+            alert("Error al guardar borrador.");
+        }
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
 
-        // Validation: If Admin and Global Filter is 'all', prevent save
-        if (user?.role === 'admin' && (!globalFilterCompanyId || globalFilterCompanyId === 'all')) {
-            alert('Por favor, selecciona una empresa específica en el filtro superior para guardar la auditoría.');
+        // Validation: Ensure we can resolve a target company ID
+        // If admin/superadmin & global filter is 'all', we fallback to user's assigned company.
+        // If user has no company assigned and selects 'all', then we block.
+        // STRICT CHECK: user.isGlobalAdmin
+        const isGlobalAdmin = user?.isGlobalAdmin;
+        let targetCompanyId = (isGlobalAdmin && globalFilterCompanyId !== 'all')
+            ? globalFilterCompanyId
+            : (user.company_id || user.companyId);
+
+        // Fallback to manually selected company
+        if (!targetCompanyId && selectedCompanyId) {
+            targetCompanyId = selectedCompanyId;
+        }
+
+        if (!targetCompanyId) {
+            alert('Por favor, selecciona una empresa en el filtro superior o en el formulario para guardar.');
             return;
         }
 
@@ -323,19 +415,9 @@ const Auditoria5S = () => {
                 await supabase.from('audit_5s_entries').delete().eq('audit_id', editingId);
             } else {
                 // Insert
-                const targetCompanyId = user.role === 'admin' && globalFilterCompanyId !== 'all' ? globalFilterCompanyId : (user.company_id || user.companyId); // fallback to user.companyId from context if company_id (db field) missing in session user object
-
-                // Note: user object from context might have camelCase companyId or snake_case company_id depending on how it was mapped. 
-                // Let's be safe. But `useAuth` usually provides normalized user. 
-                // Let's assume user.companyId is the one we use elsewhere.
-                const finalCompanyId = targetCompanyId || user.companyId;
-
-                if (!finalCompanyId) {
-                    // Only throw if we strictly enforce it. For now, let's try to proceed or handle error.
-                    // throw new Error('No Company ID identified');
-                }
-
-                payload.company_id = finalCompanyId;
+                // Insert
+                // Use the validated targetCompanyId from outer scope
+                payload.company_id = targetCompanyId;
                 const { data, error } = await supabase.from('audit_5s').insert([payload]).select().single();
                 if (error) throw error;
                 auditId = data.id;
@@ -355,6 +437,16 @@ const Auditoria5S = () => {
                 });
             });
             await supabase.from('audit_5s_entries').insert(entriesToInsert);
+
+
+
+            // Cleanup Draft if this was a draft
+            if (auditData.tempId) {
+                await offlineService.deleteAudit(auditData.tempId);
+                // Also refresh offline list
+                const loc = await offlineService.getAllAudits();
+                setOfflineAudits(loc);
+            }
 
             fetchAudits();
             setView('dashboard');
@@ -377,8 +469,12 @@ const Auditoria5S = () => {
     // --- CHART LOGIC ---
 
     const filteredAudits = useMemo(() => {
+        // Already filtered by server, but we keep this safely or remove it. 
+        // Let's rely on server filter + simple year match to be 100% sure with string parsing
         return audits.filter(a => {
-            const auditYear = new Date(a.audit_date).getFullYear();
+            if (!a.audit_date) return false;
+            // Robust Year Check: "YYYY-MM-DD" -> split[0]
+            const auditYear = parseInt(a.audit_date.split('-')[0]);
             return auditYear === parseInt(chartConfig.yearFilter);
         });
     }, [audits, chartConfig.yearFilter]);
@@ -508,12 +604,26 @@ const Auditoria5S = () => {
                 subtitle="Evaluación y seguimiento de estándares de orden y limpieza"
             >
                 {view === 'dashboard' && (
-                    <button
-                        onClick={() => initForm()}
-                        className="bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors font-medium shadow-sm shadow-brand-500/30"
-                    >
-                        <Plus size={20} /> Nueva Auditoría
-                    </button>
+                    <div className="flex items-center gap-2">
+                        {/* Selector de Año */}
+                        <select
+                            value={selectedYear}
+                            onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                            className="bg-white border border-slate-300 text-slate-700 py-2 px-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium shadow-sm h-[40px] cursor-pointer"
+                        >
+                            {[...Array(5)].map((_, i) => {
+                                const y = new Date().getFullYear() - i;
+                                return <option key={y} value={y}>{y}</option>
+                            })}
+                        </select>
+
+                        <button
+                            onClick={() => initForm()}
+                            className="bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors font-medium shadow-sm shadow-brand-500/30 h-[40px]"
+                        >
+                            <Plus size={20} /> Nueva Auditoría
+                        </button>
+                    </div>
                 )}
                 {view === 'form' && (
                     <button
@@ -538,10 +648,54 @@ const Auditoria5S = () => {
             {view === 'dashboard' ? (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     {/* Charts Section */}
-                    {filteredAudits.length > 0 ? (
+                    {/* Charts Section */}
+                    {filteredAudits.length > 0 || offlineAudits.length > 0 ? (
                         <>
+                            {/* DRAFTS SECTION */}
+                            {offlineAudits.length > 0 && (
+                                <div className="col-span-1 lg:col-span-2 bg-amber-50 border border-amber-200 rounded-xl p-6 shadow-sm mb-6">
+                                    <h3 className="text-lg font-bold text-amber-800 mb-4 flex items-center gap-2">
+                                        <Edit size={20} /> Auditorías Pendientes (Borradores Locales)
+                                    </h3>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                        {offlineAudits.map(draft => (
+                                            <div key={draft.tempId} className="bg-white p-4 rounded-lg border border-amber-100 shadow-sm flex flex-col justify-between">
+                                                <div>
+                                                    <div className="flex justify-between items-start mb-2">
+                                                        <span className="font-bold text-slate-700">{draft.data.area || 'Sin Área'}</span>
+                                                        <span className="text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded-full font-bold">Borrador</span>
+                                                    </div>
+                                                    <p className="text-sm text-slate-500 mb-1">{draft.data.date}</p>
+                                                    <p className="text-xs text-slate-400 italic mb-3">{draft.data.title || 'Sin Título'}</p>
+                                                </div>
+                                                <div className="flex gap-2 mt-2 pt-2 border-t border-slate-100">
+                                                    <button
+                                                        onClick={() => initForm(draft)}
+                                                        className="flex-1 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 py-2 rounded text-sm font-bold transition-colors"
+                                                    >
+                                                        Revisar / Editar
+                                                    </button>
+                                                    <button
+                                                        onClick={async () => {
+                                                            if (window.confirm('¿Descartar este borrador?')) {
+                                                                await offlineService.deleteAudit(draft.tempId);
+                                                                setOfflineAudits(await offlineService.getAllAudits());
+                                                            }
+                                                        }}
+                                                        className="p-2 text-red-500 hover:bg-red-50 rounded transition-colors"
+                                                        title="Descartar"
+                                                    >
+                                                        <Trash2 size={18} />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
                             {/* Radar Chart */}
-                            <div className="bg-white p-4 rounded-xl shadow-lg border border-slate-200">
+                            <div className="bg-white p-4 rounded-xl shadow-lg border border-slate-200 overflow-hidden">
                                 <div className="flex justify-between items-center mb-4">
                                     <h3 className="text-lg font-semibold text-indigo-700">Última Auditoría (Radar)</h3>
                                     <span className="text-xs text-slate-500">{filteredAudits[0]?.title || filteredAudits[0]?.audit_date}</span>
@@ -560,7 +714,7 @@ const Auditoria5S = () => {
                             </div>
 
                             {/* Evolution Chart */}
-                            <div className="bg-white p-4 rounded-xl shadow-lg border border-slate-200">
+                            <div className="bg-white p-4 rounded-xl shadow-lg border border-slate-200 overflow-hidden">
                                 <div className="flex justify-between items-center mb-4">
                                     <h3 className="text-lg font-semibold text-emerald-700">Evolución ({chartConfig.granularity})</h3>
                                     <div className="flex gap-2 text-xs">
@@ -582,7 +736,7 @@ const Auditoria5S = () => {
                             </div>
 
                             {/* Scores by Area */}
-                            <div className="bg-white p-4 rounded-xl shadow-lg border border-slate-200">
+                            <div className="bg-white p-4 rounded-xl shadow-lg border border-slate-200 overflow-hidden">
                                 <h3 className="text-lg font-semibold mb-4 text-purple-700">Puntaje Promedio por Área</h3>
                                 <div className="h-64 w-full">
                                     <ResponsiveContainer width="100%" height="100%" minWidth={100} minHeight={100}>
@@ -598,7 +752,7 @@ const Auditoria5S = () => {
                             </div>
 
                             {/* Scores by S Factor (Aggregate) */}
-                            <div className="bg-white p-4 rounded-xl shadow-lg border border-slate-200">
+                            <div className="bg-white p-4 rounded-xl shadow-lg border border-slate-200 overflow-hidden">
                                 <h3 className="text-lg font-semibold mb-4 text-orange-700">Desempeño Global por S</h3>
                                 <div className="h-64 w-full">
                                     <ResponsiveContainer width="100%" height="100%" minWidth={100} minHeight={100}>
@@ -725,6 +879,24 @@ const Auditoria5S = () => {
             ) : (
                 <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-200 max-w-4xl mx-auto animate-fadeIn">
                     <form onSubmit={handleSubmit}>
+                        {/* Company Selector for Superadmin if Global Filter is 'All' */}
+                        {(user?.role === 'admin' || user?.role === 'superadmin') && (!user.company_id && globalFilterCompanyId === 'all') && (
+                            <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                                <label className="block text-sm font-bold text-amber-900 mb-1">Empresa Cliente *</label>
+                                <select
+                                    className="w-full bg-white border border-amber-300 rounded-lg py-2 px-3 text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                                    value={selectedCompanyId}
+                                    onChange={(e) => setSelectedCompanyId(e.target.value)}
+                                    required
+                                >
+                                    <option value="">-- Seleccionar Empresa para esta Auditoría --</option>
+                                    {companies.map(c => (
+                                        <option key={c.id} value={c.id}>{c.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
 
                             <div className="md:col-span-2">
@@ -883,6 +1055,13 @@ const Auditoria5S = () => {
                                 className="px-6 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
                             >
                                 Cancelar
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleSaveLocal}
+                                className="px-6 py-2 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-800 font-semibold transition-colors flex items-center gap-2 border border-amber-200"
+                            >
+                                <Save size={20} /> Guardar Borrador
                             </button>
                             <button
                                 type="submit"

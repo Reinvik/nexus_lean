@@ -44,7 +44,8 @@ const ResponsablesPage = () => {
         // disregarding company mismatch (safety net for data inconsistency)
         if (item.responsible === user.name) return true;
 
-        const isSuperAdmin = user.role === 'admin' || user.email === 'ariel.mellag@gmail.com';
+        // STRICT PERMISSION CHECK: usage of 'isGlobalAdmin' from AuthContext
+        const isSuperAdmin = user.isGlobalAdmin;
         const targetCompanyId = isSuperAdmin ? globalFilterCompanyId : user.companyId;
 
         if (targetCompanyId === 'all') return true;
@@ -58,7 +59,8 @@ const ResponsablesPage = () => {
         const names = new Set();
 
         // Determine current filter context
-        const isSuperAdmin = user?.role === 'admin' || user?.email === 'ariel.mellag@gmail.com';
+        // STRICT PERMISSION CHECK: usage of 'isGlobalAdmin' from AuthContext
+        const isSuperAdmin = user?.isGlobalAdmin;
         const targetCompanyId = isSuperAdmin ? globalFilterCompanyId : user?.companyId;
 
         // Add authorized users for this company context
@@ -607,6 +609,7 @@ Nexus Jarvis System | CIAL Alimentos`);
                         </div>
                     )}
                 </div>
+
 
             </div>
         </div>

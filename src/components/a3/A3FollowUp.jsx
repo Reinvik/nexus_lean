@@ -189,7 +189,7 @@ const A3FollowUp = ({ data = {}, onChange }) => {
                                             <label className="text-xs font-bold text-cyan-700 uppercase mb-1 block">Velocidad Estándar (pzs/hr)</label>
                                             <input
                                                 type="number"
-                                                className="w-full px-3 py-2 bg-white border border-cyan-200 rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none text-sm"
+                                                className="w-full px-3 py-2 bg-white border border-cyan-200 rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none text-sm text-slate-900"
                                                 placeholder="100"
                                                 value={oeeConfig.standardSpeed}
                                                 onChange={(e) => handleChange('oeeConfig', { ...oeeConfig, standardSpeed: parseFloat(e.target.value) || 100 })}
@@ -199,7 +199,7 @@ const A3FollowUp = ({ data = {}, onChange }) => {
                                             <label className="text-xs font-bold text-cyan-700 uppercase mb-1 block">Duración Turno (hrs)</label>
                                             <input
                                                 type="number"
-                                                className="w-full px-3 py-2 bg-white border border-cyan-200 rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none text-sm"
+                                                className="w-full px-3 py-2 bg-white border border-cyan-200 rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none text-sm text-slate-900"
                                                 placeholder="8"
                                                 value={oeeConfig.shiftDuration}
                                                 onChange={(e) => handleChange('oeeConfig', { ...oeeConfig, shiftDuration: parseFloat(e.target.value) || 8 })}
@@ -214,7 +214,7 @@ const A3FollowUp = ({ data = {}, onChange }) => {
                                     <label className="text-xs font-bold text-slate-500 uppercase mb-1.5 block">{kpiType === 'oee' ? 'Nombre (Línea/Máquina)' : 'Nombre del KPI'}</label>
                                     <input
                                         type="text"
-                                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm transition-all shadow-sm"
+                                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm transition-all shadow-sm text-slate-900"
                                         placeholder={kpiType === 'oee' ? 'Ej: Línea 1' : 'Ej: Tiempo de cambio (min)'}
                                         value={kpiName}
                                         onChange={(e) => handleChange('kpiName', e.target.value)}
@@ -226,7 +226,7 @@ const A3FollowUp = ({ data = {}, onChange }) => {
                                         <Calendar size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                                         <input
                                             type="date"
-                                            className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm transition-all shadow-sm"
+                                            className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm transition-all shadow-sm text-slate-900"
                                             value={interventionDate}
                                             onChange={(e) => handleChange('interventionDate', e.target.value)}
                                         />
@@ -239,7 +239,7 @@ const A3FollowUp = ({ data = {}, onChange }) => {
                                         <input
                                             type="number"
                                             step="0.01"
-                                            className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm transition-all shadow-sm"
+                                            className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none text-sm transition-all shadow-sm text-slate-900"
                                             placeholder="0.00"
                                             value={kpiGoal}
                                             onChange={(e) => handleChange('kpiGoal', e.target.value)}

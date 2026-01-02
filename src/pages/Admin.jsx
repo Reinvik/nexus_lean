@@ -73,9 +73,19 @@ const AdminPage = () => {
     const handleAddCompany = async (e) => {
         e.preventDefault();
         if (newCompanyName.trim() && newCompanyDomain.trim()) {
-            await addCompany(newCompanyName, newCompanyDomain.toLowerCase().trim());
-            setNewCompanyName('');
-            setNewCompanyDomain('');
+            const { success, error } = await addCompany(newCompanyName, newCompanyDomain.toLowerCase().trim());
+            if (success) {
+                setNewCompanyName('');
+                setNewCompanyDomain('');
+                alert('Empresa creada correctamente.');
+            } else {
+                // Check if it's a conflict
+                if (error.code === '23505') {
+                    alert('Error: Ya existe una empresa con ese dominio.');
+                } else {
+                    alert('Error al crear empresa: ' + (error?.message || 'Error desconocido'));
+                }
+            }
         }
     };
 
@@ -141,6 +151,16 @@ const AdminPage = () => {
 
     const handleCompanyChange = async (userId, newCompanyId) => {
         if (!newCompanyId) return;
+
+        if (newCompanyId === 'all') {
+            if (window.confirm('¿Convertir a este usuario en SUPER ADMIN (ver todas las empresas)?')) {
+                await updateUserRole(userId, 'superadmin');
+                await updateUserCompany(userId, null);
+                fetchUsers();
+            }
+            return;
+        }
+
         if (window.confirm('¿Cambiar empresa del usuario?')) {
             await updateUserCompany(userId, newCompanyId);
             fetchUsers();
@@ -194,60 +214,56 @@ const AdminPage = () => {
                     <p className="text-slate-500 mt-1">Gestión centralizada de empresas, usuarios y mantenimiento.</p>
                 </div>
 
-                {/* Only Global Admin can see Diagnostic/Repair Tools */}
+                {/* Admin Actions Toolbar */}
                 <div className="flex bg-white rounded-lg p-1 border border-slate-200 shadow-sm">
                     <button
                         onClick={() => setShowInviteModal(true)}
-                        className="flex items-center gap-2 px-3 py-2 text-sm font-bold text-white bg-brand-600 hover:bg-brand-700 rounded-md transition-colors shadow-sm"
+                        className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-white bg-brand-600 hover:bg-brand-700 rounded-md transition-colors shadow-sm"
                         title="Invitar Nuevo Usuario"
                     >
-                        <Send size={16} /> Invitar
-                    </button>
-                    <div className="w-px bg-slate-200 my-1 mx-1"></div>
-                    <button
-                        onClick={() => refreshData()}
-                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-600 hover:text-brand-600 hover:bg-slate-50 rounded-md transition-colors"
-                        title="Recargar Datos"
-                    >
-                        <RefreshCw size={16} /> Recargar
+                        <Send size={16} /> Invitar Usuario
                     </button>
 
                     {user.isGlobalAdmin && (
                         <>
-                            <div className="w-px bg-slate-200 my-1 mx-1"></div>
+                            <div className="w-px bg-slate-200 my-1 mx-2"></div>
+
+                            {/* Maintenance Tools (Hidden unless needed usually, but kept for Superadmin) */}
                             <button
                                 onClick={async () => {
                                     const res = await repairAdminProfile();
                                     alert(res.message);
+                                    window.location.reload();
                                 }}
-                                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-600 hover:text-blue-600 hover:bg-slate-50 rounded-md transition-colors"
-                                title="Reparar Permisos"
+                                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-500 hover:text-blue-600 hover:bg-slate-50 rounded-md transition-colors"
+                                title="Restaurar permisos de Superadmin si se han perdido"
                             >
-                                <Wrench size={16} /> Permisos
+                                <Shield size={16} /> Restaurar Acceso
                             </button>
-                            <div className="w-px bg-slate-200 my-1 mx-1"></div>
+
                             <button
                                 onClick={async () => {
-                                    // Logic remains the same, just keeping the cleaner UI trigger
                                     try {
                                         const { supabase } = await import('../supabaseClient');
                                         const { data: orphanCards, error } = await supabase.from('five_s_cards').select('id, responsible').is('company_id', null);
                                         if (error) throw error;
-                                        if (!orphanCards?.length) { alert('✅ No hay tarjetas 5S huérfanas.'); return; }
+                                        if (!orphanCards?.length) { alert('✅ No se encontraron tarjetas 5S huérfanas.'); return; }
+
                                         const { data: profiles } = await supabase.from('profiles').select('name, company_id');
                                         const profileMap = {}; profiles?.forEach(p => { if (p.name && p.company_id) profileMap[p.name] = p.company_id; });
+
                                         let fixed = 0;
                                         for (const card of orphanCards) {
                                             const cid = profileMap[card.responsible];
                                             if (cid) { await supabase.from('five_s_cards').update({ company_id: cid }).eq('id', card.id); fixed++; }
                                         }
-                                        alert(`✅ Reparación completada: ${fixed} tarjetas correjidas.`);
+                                        alert(`✅ Mantenimiento completado: ${fixed} tarjetas vinculadas a sus empresas.`);
                                     } catch (err) { alert('Error: ' + err.message); }
                                 }}
-                                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-600 hover:text-emerald-600 hover:bg-slate-50 rounded-md transition-colors"
-                                title="Reparar 5S"
+                                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-500 hover:text-emerald-600 hover:bg-slate-50 rounded-md transition-colors"
+                                title="Buscar y reparar tarjetas que perdieron su asociación de empresa"
                             >
-                                <Activity size={16} /> Reparar 5S
+                                <Activity size={16} /> Vincular Huérfanos
                             </button>
                         </>
                     )}
@@ -275,7 +291,7 @@ const AdminPage = () => {
                                 <form onSubmit={handleAddCompany} className="flex flex-col gap-3">
                                     <input
                                         type="text"
-                                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none"
+                                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none"
                                         placeholder="Nombre de la empresa"
                                         value={newCompanyName}
                                         onChange={(e) => setNewCompanyName(e.target.value)}
@@ -283,7 +299,7 @@ const AdminPage = () => {
                                     <div className="flex gap-2">
                                         <input
                                             type="text"
-                                            className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none"
+                                            className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none"
                                             placeholder="Dominio (ej: acme.com)"
                                             value={newCompanyDomain}
                                             onChange={(e) => setNewCompanyDomain(e.target.value)}
@@ -332,22 +348,7 @@ const AdminPage = () => {
                             </div>
                         </div>
 
-                        {/* Maintenance Zone moved to side column for better layout in large screens */}
-                        <div className="bg-red-50 rounded-xl border border-red-100 p-5">
-                            <h3 className="flex items-center gap-2 text-red-700 font-bold mb-2">
-                                <AlertTriangle size={18} /> Zona de Riesgo
-                            </h3>
-                            <p className="text-xs text-red-600 mb-4 leading-relaxed">
-                                Acciones destructivas para mantenimiento de la base de datos.
-                                Elimina registros huérfanos que no pertenecen a ninguna empresa.
-                            </p>
-                            <button
-                                onClick={handlePurgeLegacyData}
-                                className="w-full py-2 bg-white border border-red-200 text-red-600 text-xs font-bold rounded-lg hover:bg-red-50 hover:border-red-300 transition-colors shadow-sm"
-                            >
-                                Eliminar Datos Huerfanos
-                            </button>
-                        </div>
+
                     </div>
                 ) : null}
 
@@ -402,7 +403,7 @@ const AdminPage = () => {
                                             <input
                                                 type="text"
                                                 required
-                                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 outline-none"
+                                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-900 focus:ring-2 focus:ring-brand-500 outline-none"
                                                 placeholder="Ej: Juan Pérez"
                                                 value={inviteName}
                                                 onChange={e => setInviteName(e.target.value)}
@@ -413,7 +414,7 @@ const AdminPage = () => {
                                             <input
                                                 type="email"
                                                 required
-                                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 outline-none"
+                                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-900 focus:ring-2 focus:ring-brand-500 outline-none"
                                                 placeholder="juan@empresa.com"
                                                 value={inviteEmail}
                                                 onChange={e => setInviteEmail(e.target.value)}
@@ -424,7 +425,7 @@ const AdminPage = () => {
                                             <select
                                                 required
                                                 disabled={!user.isGlobalAdmin}
-                                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 outline-none disabled:bg-slate-100 disabled:text-slate-500"
+                                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-900 focus:ring-2 focus:ring-brand-500 outline-none disabled:bg-slate-100 disabled:text-slate-500"
                                                 value={inviteCompanyId}
                                                 onChange={e => setInviteCompanyId(e.target.value)}
                                             >
@@ -511,7 +512,8 @@ const AdminPage = () => {
                                                 <tr>
                                                     <th className="px-5 py-3">Usuario</th>
                                                     <th className="px-5 py-3 text-center">Rol</th>
-                                                    {(user.role === 'superadmin' || user.email === 'ariel.mellag@gmail.com') && (
+                                                    <th className="px-5 py-3 text-center">Último Acceso</th>
+                                                    {user.isGlobalAdmin && (
                                                         <th className="px-5 py-3">Empresa</th>
                                                     )}
                                                     <th className="px-5 py-3 text-right">Acciones</th>
@@ -539,21 +541,29 @@ const AdminPage = () => {
                                                                 </button>
                                                             }
                                                         </td>
-                                                        {(user.role === 'superadmin' || user.email === 'ariel.mellag@gmail.com') && (
-                                                            <td className="px-5 py-3">
-                                                                <select
-                                                                    value={u.company_id || ''}
-                                                                    onChange={(e) => handleCompanyChange(u.id, e.target.value)}
-                                                                    className="bg-transparent text-sm text-slate-600 border-none focus:ring-0 cursor-pointer hover:text-brand-600 font-medium py-0 pl-0"
-                                                                >
-                                                                    <option value="" disabled>Seleccionar...</option>
-                                                                    {companies.map(c => (
-                                                                        <option key={c.id} value={c.id}>{c.name}</option>
-                                                                    ))}
-                                                                </select>
-                                                            </td>
-                                                        )}
-                                                        <td className="px-5 py-3 text-right flex justify-end gap-2">
+                                                        <td className="px-5 py-3 text-center text-xs text-slate-500">
+                                                            {u.last_login ? new Date(u.last_login).toLocaleString('es-CL', {
+                                                                day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit'
+                                                            }) : <span className="opacity-50">Nunca</span>}
+                                                        </td>
+                                                        {
+                                                            user.isGlobalAdmin && (
+                                                                <td className="px-5 py-3">
+                                                                    <select
+                                                                        value={u.company_id || ''}
+                                                                        onChange={(e) => handleCompanyChange(u.id, e.target.value)}
+                                                                        className="bg-transparent text-sm text-slate-600 border-none focus:ring-0 cursor-pointer hover:text-brand-600 font-medium py-0 pl-0"
+                                                                    >
+                                                                        <option value="" disabled>Seleccionar...</option>
+                                                                        <option value="all" className="font-bold text-amber-600">★ Todas (Super Admin)</option>
+                                                                        {companies.map(c => (
+                                                                            <option key={c.id} value={c.id}>{c.name}</option>
+                                                                        ))}
+                                                                    </select>
+                                                                </td>
+                                                            )
+                                                        }
+                                                        < td className="px-5 py-3 text-right flex justify-end gap-2" >
                                                             <button
                                                                 onClick={() => handleStatusChange(u.id)}
                                                                 className="text-slate-300 hover:text-amber-500 p-1.5 rounded-md hover:bg-amber-50 transition-colors"
@@ -579,8 +589,8 @@ const AdminPage = () => {
                         </div>
                     </div>
                 </div>
-            </div>
-        </div>
+            </div >
+        </div >
     );
 };
 

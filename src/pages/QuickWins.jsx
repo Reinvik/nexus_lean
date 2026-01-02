@@ -8,6 +8,7 @@ import ImageUpload from '../components/ImageUpload';
 import StatCard from '../components/StatCard';
 import MobileFab from '../components/mobile/MobileFab';
 import CameraCapture from '../components/mobile/CameraCapture';
+import { generateQuickWinSolution } from '../services/geminiService';
 
 const QuickWinsPage = () => {
     const { user, companyUsers, globalFilterCompanyId } = useAuth();
@@ -27,6 +28,7 @@ const QuickWinsPage = () => {
     const [newIdea, setNewIdea] = useState({
         title: '',
         description: '',
+        proposedSolution: '', // Nuevo campo
         impact: 'Medio',
         responsible: '', // Nuevo campo
         deadline: '',     // Nuevo campo
@@ -35,14 +37,35 @@ const QuickWinsPage = () => {
 
     // Estado local para los datos
     const [allWins, setAllWins] = useState([]);
+    const [companies, setCompanies] = useState([]); // [New] State for companies list
+    const [isGenerating, setIsGenerating] = useState(false);
+    const [savingField, setSavingField] = useState(null);
+
     // const [loading, setLoading] = useState(true);
 
     // Cargar datos de Supabase
     useEffect(() => {
         if (user) {
             fetchWins();
+            // Fetch companies if user is Global Admin
+            if (user.isGlobalAdmin) {
+                fetchCompanies();
+            }
         }
     }, [user, globalFilterCompanyId]);
+
+    const fetchCompanies = async () => {
+        try {
+            const { data, error } = await supabase
+                .from('companies')
+                .select('id, name')
+                .order('name');
+            if (error) throw error;
+            setCompanies(data || []);
+        } catch (error) {
+            console.error('Error fetching companies:', error);
+        }
+    };
 
     const fetchWins = async () => {
         try {
@@ -60,6 +83,7 @@ const QuickWinsPage = () => {
                     id: w.id,
                     title: w.title,
                     description: w.description,
+                    proposedSolution: w.proposed_solution,
                     status: w.status,
                     impact: w.impact,
                     responsible: w.responsible,
@@ -99,20 +123,25 @@ const QuickWinsPage = () => {
     const visibleWins = useMemo(() => {
         if (!user) return [];
 
-        const isSuperAdmin = user.role === 'admin' || user.email === 'ariel.mellag@gmail.com';
+        // STRICT PERMISSION CHECK: usage of 'isGlobalAdmin' from AuthContext
+        const isSuperAdmin = user.isGlobalAdmin;
         const targetCompanyId = isSuperAdmin ? globalFilterCompanyId : user.companyId;
 
-        if (targetCompanyId === 'all') return allWins;
+        if (targetCompanyId === 'all') {
+            // Only Super Admins can see 'all'
+            return isSuperAdmin ? allWins : [];
+        }
 
-        // Show tasks matching company OR assigned to current user (safety net) OR global/legacy items (no companyId)
-        return allWins.filter(w => w.companyId === targetCompanyId || w.responsible === user.name || !w.companyId);
+        // Show tasks matching company OR global/legacy items (no companyId)
+        // STRICT FILTER: Removed `w.responsible === user.name` to prevent cross-company leakage in Admin view
+        return allWins.filter(w => w.companyId == targetCompanyId || (!w.companyId && isSuperAdmin));
     }, [allWins, user, globalFilterCompanyId]);
 
     // Filtrado Local (Búsqueda, Estado, Impacto)
     const filteredWins = useMemo(() => {
         return visibleWins.filter(win => {
-            const matchesSearch = win.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                win.description.toLowerCase().includes(searchTerm.toLowerCase());
+            const matchesSearch = (win.title || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                (win.description || '').toLowerCase().includes(searchTerm.toLowerCase());
             const matchesStatus = filterStatus === 'all' || win.status === filterStatus;
             const matchesImpact = filterImpact === 'all' || win.impact === filterImpact;
 
@@ -124,7 +153,7 @@ const QuickWinsPage = () => {
     const kpiData = useMemo(() => {
         const total = visibleWins.length;
         const done = visibleWins.filter(w => w.status === 'done').length;
-        const ideas = visibleWins.filter(w => w.status === 'idea').length;
+        const ideas = visibleWins.filter(w => w.status !== 'done').length;
         const highImpact = visibleWins.filter(w => w.impact === 'Alto').length;
 
         return { total, done, ideas, highImpact };
@@ -156,6 +185,7 @@ const QuickWinsPage = () => {
         const newWinDB = {
             title: newIdea.title,
             description: newIdea.description,
+            proposed_solution: newIdea.proposedSolution,
             impact: newIdea.impact,
             responsible: newIdea.responsible,
             deadline: newIdea.deadline,
@@ -177,7 +207,7 @@ const QuickWinsPage = () => {
                 // Update local state by refetching or appending
                 fetchWins();
                 setIsNewModalOpen(false);
-                setNewIdea({ title: '', description: '', impact: 'Medio', responsible: '', deadline: '', image: null });
+                setNewIdea({ title: '', description: '', proposedSolution: '', impact: 'Medio', responsible: '', deadline: '', image: null });
             }
         } catch (error) {
             alert('Error al crear la idea: ' + error.message);
@@ -186,15 +216,23 @@ const QuickWinsPage = () => {
 
     // Actualizar campos genéricos (como responsable)
     const handleUpdateField = async (id, field, value) => {
+        setSavingField(field);
+
         // Optimistic update
         const oldWins = [...allWins];
+
+        // Map DB field names to local state camelCase names if needed
+        let localField = field;
+        if (field === 'company_id') localField = 'companyId';
+        if (field === 'proposed_solution') localField = 'proposedSolution';
+
         setAllWins(prev => prev.map(win =>
-            win.id === id ? { ...win, [field]: value } : win
+            win.id === id ? { ...win, [localField]: value } : win
         ));
 
         // Also update selectedWin if it's the one being edited
         if (selectedWin && selectedWin.id === id) {
-            setSelectedWin(prev => ({ ...prev, [field]: value }));
+            setSelectedWin(prev => ({ ...prev, [localField]: value }));
         }
 
         try {
@@ -204,16 +242,19 @@ const QuickWinsPage = () => {
                 .eq('id', id);
 
             if (error) throw error;
+
+            // Visual feedback handled by button state, no alert needed
         } catch (error) {
             console.error(`Error updating ${field}:`, error);
             alert(`Error al actualizar ${field}`);
             setAllWins(oldWins); // Revert
             if (selectedWin && selectedWin.id === id) {
-                // Revert selectedWin logic (approximate since we don't have deep clone of selectedWin easily available without state)
-                // Getting from oldWins is safer
+                // Revert selectedWin logic
                 const oldWin = oldWins.find(w => w.id === id);
                 if (oldWin) setSelectedWin(oldWin);
             }
+        } finally {
+            setSavingField(null);
         }
     };
 
@@ -246,6 +287,60 @@ const QuickWinsPage = () => {
             setAllWins(oldWins); // Revert
         }
     };
+
+    // Generar Solución con IA
+    const handleGenerateSolution = async (currentWin) => {
+        if (!currentWin.title || !currentWin.description) {
+            alert("Necesitas un título y descripción para generar una solución.");
+            return;
+        }
+
+        setIsGenerating(true);
+        try {
+            const apiKey = import.meta.env.VITE_GEMINI_API_KEY; // Acceso directo a VITE env
+            if (!apiKey) throw new Error("Falta la API Key");
+
+            const solution = await generateQuickWinSolution(currentWin.title, currentWin.description, apiKey);
+
+            if (solution) {
+                // Si es nueva idea (modal crear)
+                if (currentWin === newIdea) {
+                    setNewIdea(prev => ({ ...prev, proposedSolution: solution }));
+                }
+                // Si es edición (modal detalle)
+                else {
+                    handleUpdateField(currentWin.id, 'proposed_solution', solution); // DB update
+                    // UI update handled by handleUpdateField mapping but we need to ensure optimistic UI matches camelCase
+                    // handleUpdateField uses dynamic prop, but our local state maps 'proposed_solution' -> need to verify.
+                    // Wait, fetch mapping is 'proposedSolution' but handleUpdateField sends 'proposed_solution' to DB?
+                    // Let's check handleUpdateField. It takes 'field' name.
+                    // If we pass 'proposed_solution', it updates DB column 'proposed_solution'.
+                    // But local state 'allWins' expects 'proposedSolution'.
+                    // handleUpdateField implementation: 
+                    // setAllWins(prev => prev.map(win => win.id === id ? { ...win, [field]: value } : win));
+                    // If we call with 'proposed_solution', local state gets property 'proposed_solution'.
+                    // But rendering uses 'proposedSolution'. Mismatch!
+
+                    // FIX: We need to update local state with camelCase, DB with snake_case.
+                    // Reuse logic but be careful. 
+                    // For now, let's just manually update local state to be safe.
+                    setAllWins(prev => prev.map(w => w.id === currentWin.id ? { ...w, proposedSolution: solution } : w));
+                    setSelectedWin(prev => ({ ...prev, proposedSolution: solution }));
+
+                    // DB Update
+                    supabase.from('quick_wins').update({ proposed_solution: solution }).eq('id', currentWin.id).then(({ error }) => {
+                        if (error) console.error("Error saving AI solution", error);
+                    });
+                }
+            }
+        } catch (error) {
+            console.error(error);
+            alert("Error generando solución: " + error.message);
+        } finally {
+            setIsGenerating(false);
+        }
+    };
+
 
     // Modal de Completar Tarea
     const [completionModal, setCompletionModal] = useState(null); // ID de la tarea a completar
@@ -408,12 +503,12 @@ const QuickWinsPage = () => {
                             Ideas Pendientes
                         </h3>
                         <span className="bg-white px-2.5 py-1 rounded-full text-xs font-bold text-amber-600 border border-amber-200 shadow-sm">
-                            {filteredWins.filter(w => w.status === 'idea').length}
+                            {filteredWins.filter(w => w.status !== 'done').length}
                         </span>
                     </div>
 
                     <div className="grid gap-4">
-                        {filteredWins.filter(w => w.status === 'idea').map(win => (
+                        {filteredWins.filter(w => w.status !== 'done').map(win => (
                             <div
                                 key={win.id}
                                 className="group bg-white rounded-xl p-5 shadow-sm border border-slate-200 hover:shadow-md hover:border-brand-200 transition-all cursor-pointer relative overflow-hidden"
@@ -456,7 +551,7 @@ const QuickWinsPage = () => {
                             </div>
                         ))}
 
-                        {filteredWins.filter(w => w.status === 'idea').length === 0 && (
+                        {filteredWins.filter(w => w.status !== 'done').length === 0 && (
                             <div className="py-12 border-2 border-dashed border-slate-200 rounded-2xl flex flex-col items-center justify-center text-slate-400 bg-slate-50/50">
                                 <Lightbulb size={48} className="opacity-20 mb-2" />
                                 <p className="font-medium">No hay ideas pendientes</p>
@@ -553,6 +648,27 @@ const QuickWinsPage = () => {
                                     value={newIdea.description}
                                     onChange={e => setNewIdea({ ...newIdea, description: e.target.value })}
                                     placeholder="¿Qué problema resuelve y cómo?"
+                                ></textarea>
+                            </div>
+
+                            <div>
+                                <div className="flex justify-between items-center mb-2">
+                                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Solución Propuesta</label>
+                                    <button
+                                        onClick={() => handleGenerateSolution(newIdea)}
+                                        disabled={isGenerating}
+                                        className="text-xs flex items-center gap-1 text-brand-600 font-bold hover:text-brand-700 disabled:opacity-50"
+                                    >
+                                        <Zap size={12} className={isGenerating ? "animate-pulse" : ""} />
+                                        {isGenerating ? "Generando..." : "Generar con IA"}
+                                    </button>
+                                </div>
+                                <textarea
+                                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none text-slate-700 font-medium transition-all resize-none"
+                                    rows="3"
+                                    value={newIdea.proposedSolution || ''}
+                                    onChange={e => setNewIdea({ ...newIdea, proposedSolution: e.target.value })}
+                                    placeholder="Describe la solución técnica..."
                                 ></textarea>
                             </div>
 
@@ -740,6 +856,68 @@ const QuickWinsPage = () => {
                                         <p className="text-slate-700 text-base leading-relaxed">{selectedWin.description}</p>
                                     </div>
 
+                                    {/* Solución Propuesta Section */}
+                                    <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm relative group/sol">
+                                        <div className="flex justify-between items-center mb-3">
+                                            <h4 className="text-xs font-bold text-brand-600 uppercase tracking-widest flex items-center gap-2">
+                                                <Zap size={14} /> Solución Propuesta
+                                            </h4>
+                                            <button
+                                                onClick={() => handleGenerateSolution(selectedWin)}
+                                                disabled={isGenerating}
+                                                className="opacity-0 group-hover/sol:opacity-100 transition-opacity text-xs bg-brand-50 text-brand-600 px-2 py-1 rounded font-bold flex items-center gap-1"
+                                            >
+                                                <Zap size={10} /> {isGenerating ? "..." : "IA"}
+                                            </button>
+                                        </div>
+                                        <textarea
+                                            className="w-full bg-transparent border-none p-0 text-slate-700 text-base leading-relaxed resize-none focus:ring-0"
+                                            rows="3"
+                                            value={selectedWin.proposedSolution || ''}
+                                            onChange={(e) => {
+                                                const val = e.target.value;
+                                                setSelectedWin(prev => ({ ...prev, proposedSolution: val })); // Local UI
+                                            }}
+                                            onBlur={(e) => handleUpdateField(selectedWin.id, 'proposed_solution', e.target.value)} // Save on blur
+                                            placeholder="Escribe o genera una solución..."
+                                        ></textarea>
+                                    </div>
+
+                                    {/* Admin Only: Company Selector */}
+                                    {(user.role === 'admin' || user.email === 'ariel.mellag@gmail.com') && (
+                                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 border-dashed">
+                                            <h4 className="text-xs font-bold text-slate-800 uppercase tracking-widest mb-2 flex items-center gap-2">
+                                                <div className="w-2 h-2 rounded-full bg-red-500"></div> Zona Admin: Reasignar Empresa
+                                            </h4>
+                                            <p className="text-xs text-slate-700 mb-2">Si esta tarjeta aparece en todas partes, asígnale una empresa específica.</p>
+                                            <div className="flex items-center gap-2">
+                                                <select
+                                                    className="flex-1 px-3 py-2 text-xs font-bold text-slate-900 bg-white border border-slate-300 rounded outline-none focus:border-brand-500"
+                                                    value={selectedWin.companyId || ''}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value;
+                                                        setSelectedWin(prev => ({ ...prev, companyId: val }));
+                                                    }}
+                                                >
+                                                    <option value="">-- Sin asignar (Global) --</option>
+                                                    {companies.map(c => (
+                                                        <option key={c.id} value={c.id}>{c.name}</option>
+                                                    ))}
+                                                </select>
+                                                <button
+                                                    onClick={() => handleUpdateField(selectedWin.id, 'company_id', selectedWin.companyId)}
+                                                    disabled={savingField === 'company_id'}
+                                                    className={`px-3 py-2 text-white text-xs rounded font-bold transition-all ${savingField === 'company_id'
+                                                        ? 'bg-slate-400 cursor-not-allowed'
+                                                        : 'bg-slate-900 hover:bg-slate-700'
+                                                        }`}
+                                                >
+                                                    {savingField === 'company_id' ? 'Guardando...' : 'Guardar'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+
                                     <div className="grid grid-cols-2 gap-4">
                                         <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
                                             <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Responsable</h4>
@@ -770,7 +948,7 @@ const QuickWinsPage = () => {
                                         </div>
                                     </div>
 
-                                    {selectedWin.status === 'idea' && (
+                                    {selectedWin.status !== 'done' && (
                                         <button
                                             onClick={(e) => { e.stopPropagation(); openCompletionModal(selectedWin); setSelectedWin(null); }}
                                             className="w-full py-3 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl shadow-lg shadow-brand-500/20 active:scale-95 transition-all flex items-center justify-center gap-2"

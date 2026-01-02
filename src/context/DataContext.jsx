@@ -6,28 +6,29 @@ import { offlineService } from '../services/offlineService';
 const DataContext = createContext();
 
 export const DataProvider = ({ children }) => {
-    const { user } = useAuth();
+    const { user, globalFilterCompanyId } = useAuth();
 
     // 5S Cards State
     const [fiveSCards, setFiveSCards] = useState([]);
     const [loadingFiveS, setLoadingFiveS] = useState(true);
     const abortControllerRef = useRef(null);
 
-    // Responsables Data State (Quick Wins, VSM, A3)
+    // Responsables Data State (Quick Wins, VSM, A3, Audits)
     const [quickWinsData, setQuickWinsData] = useState([]);
     const [vsmData, setVsmData] = useState([]);
     const [a3Data, setA3Data] = useState([]);
+    const [auditData, setAuditData] = useState([]);
     const [loadingResponsables, setLoadingResponsables] = useState(true);
 
     // Fetch 5S Cards
-    const fetchFiveSCards = useCallback(async () => {
+    const fetchFiveSCards = useCallback(async (viewMode = 'active') => {
         if (!user) {
             setFiveSCards([]);
             setLoadingFiveS(false);
             return;
         }
 
-        // Abort previous request
+        // Abort previous request (if any)
         if (abortControllerRef.current) {
             abortControllerRef.current.abort();
         }
@@ -38,47 +39,76 @@ export const DataProvider = ({ children }) => {
         setLoadingFiveS(true);
         let currentOffline = [];
 
-        // 1. Load Offline Cards FAST
-        try {
-            const offlineCards = await offlineService.getAllCards();
-            currentOffline = offlineCards.map((record) => ({
-                id: record.tempId,
-                cardNumber: 'OFF',
-                date: record.data.date,
-                location: record.data.location,
-                article: record.data.article,
-                reporter: record.data.reporter,
-                reason: record.data.reason,
-                proposedAction: record.data.proposed_action,
-                responsible: record.data.responsible,
-                targetDate: record.data.target_date,
-                solutionDate: record.data.solution_date,
-                status: 'Pendiente de subir',
-                statusColor: '#94a3b8',
-                type: record.data.type,
-                imageBefore: record.files.imageBefore ? URL.createObjectURL(record.files.imageBefore) : null,
-                imageAfter: record.files.imageAfter ? URL.createObjectURL(record.files.imageAfter) : null,
-                companyId: record.data.company_id,
-                isOffline: true,
-                timestamp: record.timestamp
-            }));
+        // 1. Load Offline Cards (Relevant for Active and All views)
+        if (viewMode === 'active' || viewMode === 'all') {
+            try {
+                const offlineCards = await offlineService.getAllCards();
+                currentOffline = offlineCards.map((record) => ({
+                    id: record.tempId,
+                    cardNumber: 'OFF',
+                    date: record.data.date,
+                    location: record.data.location,
+                    article: record.data.article,
+                    reporter: record.data.reporter,
+                    reason: record.data.reason,
+                    proposedAction: record.data.proposed_action,
+                    responsible: record.data.responsible,
+                    targetDate: record.data.target_date,
+                    solutionDate: record.data.solution_date,
+                    status: 'Pendiente de subir',
+                    statusColor: '#94a3b8',
+                    type: record.data.type,
+                    imageBefore: record.files.imageBefore ? URL.createObjectURL(record.files.imageBefore) : null,
+                    imageAfter: record.files.imageAfter ? URL.createObjectURL(record.files.imageAfter) : null,
+                    companyId: record.data.company_id,
+                    isOffline: true,
+                    timestamp: record.timestamp
+                }));
 
-            if (currentOffline.length > 0) {
-                setFiveSCards(currentOffline);
+                if (currentOffline.length > 0) {
+                    setFiveSCards(currentOffline); // Show immediately
+                }
+            } catch (e) {
+                console.error("DataContext: Error fetching offline cards:", e);
             }
-        } catch (e) {
-            console.error("DataContext: Error fetching offline cards:", e);
         }
 
         // 2. Load Online Cards
         try {
             const timeoutId = setTimeout(() => controller.abort(), 20000);
 
-            const { data, error } = await supabase
+            let query = supabase
                 .from('five_s_cards')
-                .select('id, date, location, article, reporter, reason, proposed_action, responsible, target_date, solution_date, status, type, image_before, image_after, company_id, created_at, card_number')
-                .order('created_at', { ascending: false })
-                .abortSignal(controller.signal);
+                // OPTIMIZATION: Select LIGHT fields first. Images are fetched in background.
+                .select('id, date, location, article, reporter, reason, proposed_action, responsible, target_date, solution_date, status, type, company_id, created_at, card_number, image_before, image_after')
+                .order('created_at', { ascending: false });
+
+            // FILTER: Active vs History
+            // FILTER: Active vs History vs All
+            if (viewMode === 'active') {
+                query = query.neq('status', 'Cerrado'); // Open Only
+            } else if (viewMode === 'history') {
+                query = query.eq('status', 'Cerrado'); // Closed Only
+            }
+            // If 'all', we don't apply status filter
+
+            // LIMIT: Increase for 'all' to get better statistics for AI
+            query = query.limit(viewMode === 'all' ? 200 : 50);
+
+            // COMPANY FILTER
+            if (user?.role !== 'admin' && user?.email !== 'ariel.mellag@gmail.com') {
+                if (user.company_id) {
+                    query = query.eq('company_id', user.company_id);
+                }
+            } else {
+                // SUPERADMIN: Use global filter if set
+                if (globalFilterCompanyId && globalFilterCompanyId !== 'all') {
+                    query = query.eq('company_id', globalFilterCompanyId);
+                }
+            }
+
+            // Execute
+            const { data, error } = await query.abortSignal(controller.signal);
 
             clearTimeout(timeoutId);
 
@@ -102,27 +132,56 @@ export const DataProvider = ({ children }) => {
                     imageBefore: c.image_before,
                     imageAfter: c.image_after,
                     companyId: c.company_id,
-                    // Use persistent card_number from DB, fallback to '?' if missing
                     cardNumber: c.card_number || '?',
                     isOffline: false,
                     createdAt: c.created_at
                 }));
 
-                // Merge Offline + Online
-                const combinedData = [...currentOffline, ...onlineCardsData];
-                combinedData.sort((a, b) => {
-                    const dateA = a.isOffline ? new Date(a.timestamp) : (a.createdAt ? new Date(a.createdAt) : new Date(0));
-                    const dateB = b.isOffline ? new Date(b.timestamp) : (b.createdAt ? new Date(b.createdAt) : new Date(0));
-                    return dateB - dateA;
-                });
+                // Combine (Offline goes on top of Active and All views)
+                let combinedData = onlineCardsData;
+                if (viewMode === 'active' || viewMode === 'all') {
+                    combinedData = [...currentOffline, ...onlineCardsData];
+                    combinedData.sort((a, b) => {
+                        const dateA = a.isOffline ? new Date(a.timestamp) : (a.createdAt ? new Date(a.createdAt) : new Date(0));
+                        const dateB = b.isOffline ? new Date(b.timestamp) : (b.createdAt ? new Date(b.createdAt) : new Date(0));
+                        return dateB - dateA;
+                    });
+                }
 
-                // Do NOT overwrite cardNumber with index anymore
                 setFiveSCards(combinedData);
+
+                // 2.1 Background Fetch Images (Optimization)
+                // Only if we have server cards
+                if (onlineCardsData.length > 0) {
+                    const ids = onlineCardsData.map(c => c.id);
+                    // Fetch images for these IDs
+                    supabase
+                        .from('five_s_cards')
+                        .select('id, image_before, image_after')
+                        .in('id', ids)
+                        .then(({ data: images, error: imgError }) => {
+                            if (!imgError && images?.length > 0) {
+                                setFiveSCards(prev => prev.map(card => {
+                                    // Only update if it's a server card (not offline)
+                                    if (!card.isOffline) {
+                                        const imgData = images.find(i => i.id === card.id);
+                                        if (imgData) {
+                                            return {
+                                                ...card,
+                                                imageBefore: imgData.image_before,
+                                                imageAfter: imgData.image_after
+                                            };
+                                        }
+                                    }
+                                    return card;
+                                }));
+                            }
+                        })
+                        .catch(err => console.error("Error fetching images background:", err));
+                }
             }
         } catch (error) {
-            if (error.name === 'AbortError' || error.message?.includes('aborted')) {
-                return; // Ignore abort errors
-            }
+            if (error.name === 'AbortError' || error.message?.includes('aborted')) return;
             console.error('DataContext: Error fetching online 5S cards:', error.message);
         } finally {
             if (abortControllerRef.current === controller) {
@@ -144,10 +203,32 @@ export const DataProvider = ({ children }) => {
 
         setLoadingResponsables(true);
         try {
+            let qwQuery = supabase.from('quick_wins').select('*');
+            let vsmQuery = supabase.from('vsm_projects').select('*');
+            let a3Query = supabase.from('a3_projects').select('*');
+
+            // Apply Company Filter Logic
+            const applyFilter = (query) => {
+                if (user.isGlobalAdmin) {
+                    // SUPERADMIN: Use global filter if set
+                    if (globalFilterCompanyId && globalFilterCompanyId !== 'all') {
+                        return query.eq('company_id', globalFilterCompanyId);
+                    }
+                } else if (user.companyId) {
+                    // REGULAR USER / ADMIN: Restrict to own company
+                    return query.eq('company_id', user.companyId);
+                }
+                return query;
+            };
+
+            qwQuery = applyFilter(qwQuery);
+            vsmQuery = applyFilter(vsmQuery);
+            a3Query = applyFilter(a3Query);
+
             const [quickWinsRes, vsmRes, a3Res] = await Promise.all([
-                supabase.from('quick_wins').select('*'),
-                supabase.from('vsm_projects').select('*'),
-                supabase.from('a3_projects').select('*')
+                qwQuery,
+                vsmQuery,
+                a3Query
             ]);
 
             if (quickWinsRes.data) {
@@ -156,6 +237,9 @@ export const DataProvider = ({ children }) => {
                     responsible: w.responsible,
                     status: w.status,
                     title: w.title,
+                    description: w.description,
+                    impact: w.impact,
+                    effort: w.effort,
                     date: w.date,
                     companyId: w.company_id
                 })));
@@ -167,6 +251,12 @@ export const DataProvider = ({ children }) => {
                     responsible: v.responsible,
                     status: v.status,
                     name: v.name,
+                    description: v.description,
+                    steps: v.steps,
+                    leadTime: v.lead_time,
+                    processTime: v.process_time,
+                    efficiency: v.efficiency,
+                    taktTime: v.takt_time,
                     date: v.date,
                     companyId: v.company_id
                 })));
@@ -180,6 +270,17 @@ export const DataProvider = ({ children }) => {
                     title: p.title,
                     created_at: p.created_at,
                     actionPlan: p.action_plan || [],
+                    background: p.background,
+                    currentCondition: p.current_condition,
+                    goal: p.goal, // IMPORTANT: Mapped from snake_case
+                    rootCause: p.root_cause, // IMPORTANT
+                    analysis: p.analysis,
+                    countermeasures: p.countermeasures,
+                    ishikawas: p.ishikawas,
+                    multipleFiveWhys: p.multipleFiveWhys || p.five_whys,
+                    followUpData: Array.isArray(p.follow_up_data)
+                        ? p.follow_up_data
+                        : (p.follow_up_data && Object.keys(p.follow_up_data).length > 0 ? [p.follow_up_data] : []),
                     companyId: p.company_id
                 })));
             }
@@ -188,10 +289,36 @@ export const DataProvider = ({ children }) => {
         } finally {
             setLoadingResponsables(false);
         }
+    }, [user, globalFilterCompanyId]);
+
+    // Fetch 5S Audits (New)
+    const fetchAudits = useCallback(async () => {
+        if (!user) { setAuditData([]); return; }
+        try {
+            // OPTIMIZATION: Select specific columns instead of '*' to reduce payload
+            const { data, error } = await supabase
+                .from('audit_5s')
+                .select('id, audit_date, auditor, total_score, company_id')
+                .order('audit_date', { ascending: false })
+                .limit(50);
+            if (error) throw error;
+            if (data) {
+                setAuditData(data.map(a => ({
+                    id: a.id,
+                    date: a.audit_date,
+                    auditor: a.auditor,
+                    score: a.total_score,
+                    status: 'Completada',
+                    companyId: a.company_id
+                })));
+            }
+        } catch (err) {
+            console.error("Error fetching audits:", err);
+        }
     }, [user]);
 
-    // Prefetch REMOVED to improve login performance
-    // Pages will request data when needed.
+    // BACKGROUND PREFETCH REMOVED to prevent AbortController race conditions
+    // Components (FiveS, Responsables, Dashboard) are responsible for triggering their own data needs.
     useEffect(() => {
         if (!user) {
             setFiveSCards([]);
@@ -229,8 +356,10 @@ export const DataProvider = ({ children }) => {
             quickWinsData,
             vsmData,
             a3Data,
+            auditData,
             loadingResponsables,
-            fetchResponsablesData
+            fetchResponsablesData,
+            fetchAudits
         }}>
             {children}
         </DataContext.Provider>

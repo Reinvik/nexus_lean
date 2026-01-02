@@ -39,140 +39,168 @@ export const generateTransportesDemoData = async (companies, _addCompany) => {
     // 2. Prepare Rich Demo Data (Supabase snake_case format)
 
     // --- 5S Cards ---
+    // Repositorio de Imágenes Profesionales (Unsplash)
+    const imgWarehouse = 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=800&q=80';
+    const imgTruck = 'https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?auto=format&fit=crop&w=800&q=80';
+    const imgWorkshop = 'https://images.unsplash.com/photo-1581092921461-eab62e97a782?auto=format&fit=crop&w=800&q=80';
+    const imgOfficeDirty = 'https://images.unsplash.com/photo-1628155930542-3c7a64e2c833?auto=format&fit=crop&w=800&q=80';
+    const imgOfficeClean = 'https://images.unsplash.com/photo-1497215728101-856f4ea42174?auto=format&fit=crop&w=800&q=80';
+    const imgSafety = 'https://images.unsplash.com/photo-1625246333195-098e987cf23a?auto=format&fit=crop&w=800&q=80';
+
     const fiveSCards = [
         {
-            date: '2025-05-10',
-            location: 'Patio de Camiones',
-            article: 'Zona de Carga',
-            reporter: 'Jorge Muñoz',
-            reason: 'Pallets rotos acumulados en zona de maniobra.',
-            proposed_action: 'Retirar y reciclar.',
-            responsible: 'Jorge Muñoz',
-            target_date: '2025-05-15',
-            status: 'Pendiente', // Red
+            date: '2025-05-18',
+            location: 'Patio de Maniobras',
+            article: 'Zona de Carga A',
+            reporter: 'Ariel Mella',
+            reason: 'Acumulación de pallets rotos y plásticos en vía de tránsito. Riesgo de accidente.',
+            proposed_action: 'Segregar residuos y despejar vía inmediatamente.',
+            responsible: 'Equipo BeLean',
+            target_date: '2025-05-20',
+            status: 'Pendiente',
             type: 'Despejar',
-            company_id: companyId
+            company_id: companyId,
+            image_before: imgWarehouse,
+            card_number: 101,
+            status_color: 'bg-red-100 text-red-800'
         },
         {
-            date: '2025-05-12',
-            location: 'Taller Mecánico',
-            article: 'Banco de Herramientas',
-            reporter: 'Luis Silva',
-            reason: 'Herramientas mezcladas sin silueta.',
-            proposed_action: 'Implementar panel de sombras.',
-            responsible: 'Andrés Torres',
-            target_date: '2025-05-20',
-            solution_date: '2025-05-18',
-            status: 'Cerrado', // Green
+            date: '2025-05-15',
+            location: 'Taller de Mantenimiento',
+            article: 'Banco de Trabajo #2',
+            reporter: 'Equipo BeLean',
+            reason: 'Herramientas mezcladas y sucias con grasa.',
+            proposed_action: 'Implementar panel de sombras y limpieza estándar.',
+            responsible: 'Ariel Mella',
+            target_date: '2025-05-25',
+            solution_date: '2025-05-22',
+            status: 'Cerrado',
             type: 'Ordenar',
-            company_id: companyId
+            company_id: companyId,
+            image_before: imgWorkshop,
+            image_after: 'https://images.unsplash.com/photo-1530124566582-a618bc2615dc?auto=format&fit=crop&w=800&q=80', // Clean workshop
+            card_number: 102,
+            status_color: 'bg-green-100 text-green-800'
         },
         {
             date: '2025-05-14',
             location: 'Oficinas Administrativas',
-            article: 'Escritorio Recepción',
-            reporter: 'Ana López',
-            reason: 'Cables de red y eléctricos enredados en el suelo.',
-            proposed_action: 'Organizar con amarras y canaletas.',
-            responsible: 'Soporte TI',
+            article: 'Recepción Central',
+            reporter: 'Ariel Mella',
+            reason: 'Exceso de documentación antigua sobre escritorios.',
+            proposed_action: 'Digitalizar y archivar en bodega.',
+            responsible: 'Equipo BeLean',
             target_date: '2025-05-16',
-            status: 'En Proceso', // Orange
+            status: 'En Proceso',
             type: 'Estandarizar',
-            company_id: companyId
+            company_id: companyId,
+            image_before: imgOfficeDirty,
+            card_number: 103,
+            status_color: 'bg-orange-100 text-orange-800'
         },
         {
-            date: '2025-05-15',
+            date: '2025-05-10',
             location: 'Bodega de Repuestos',
-            article: 'Estantería B',
-            reporter: 'Pedro Ruiz',
-            reason: 'Repuestos sin etiquetar en nivel 2.',
-            proposed_action: 'Etiquetar según código SAP.',
-            responsible: 'Jefe Bodega',
-            target_date: '2025-05-25',
-            status: 'Pendiente',
-            type: 'Estandarizar',
-            company_id: companyId
+            article: 'Estantería Neumáticos',
+            reporter: 'Equipo BeLean',
+            reason: 'Neumáticos nuevos mezclados con dados de baja.',
+            proposed_action: 'Etiquetar zonas de "Nuevos" y "Scrap".',
+            responsible: 'Ariel Mella',
+            target_date: '2025-05-12',
+            solution_date: '2025-05-11',
+            status: 'Cerrado',
+            type: 'Clasificar',
+            company_id: companyId,
+            image_before: imgWarehouse,
+            card_number: 104,
+            status_color: 'bg-green-100 text-green-800'
         },
         {
-            date: '2025-05-01',
-            location: 'Zona de Lavado',
-            article: 'Hidrolavadora',
-            reporter: 'Carlos Diaz',
-            reason: 'Fuga de agua en manguera de alta presión.',
-            proposed_action: 'Reemplazar manguera.',
-            responsible: 'Mantención',
-            solution_date: '2025-05-02',
-            target_date: '2025-05-03',
+            date: '2025-05-05',
+            location: 'Estacionamiento Flota',
+            article: 'Camión TC-45',
+            reporter: 'Ariel Mella',
+            reason: 'Derrame de aceite no contenido.',
+            proposed_action: 'Limpieza con aserrín y reparación de fuga.',
+            responsible: 'Equipo BeLean',
+            solution_date: '2025-05-05',
+            target_date: '2025-05-05',
             status: 'Cerrado',
             type: 'Limpieza',
-            company_id: companyId
+            company_id: companyId,
+            image_before: imgTruck,
+            image_after: imgTruck, // Assume cleaned
+            card_number: 105,
+            status_color: 'bg-green-100 text-green-800'
         },
         {
-            date: '2025-05-18',
-            location: 'Comedor',
-            article: 'Dispensador',
-            reporter: 'Maria Lagos',
-            reason: 'Falta señalética de lavado de manos.',
-            proposed_action: 'Instalar letrero visual.',
-            responsible: 'RRHH',
-            target_date: '2025-05-22',
-            status: 'En Proceso',
-            type: 'Disciplina',
-            company_id: companyId
+            date: '2025-05-20',
+            location: 'Zona de Carga',
+            article: 'Extintores',
+            reporter: 'Equipo BeLean',
+            reason: 'Extintor bloqueado por cajas.',
+            proposed_action: 'Demarcar zona amarilla en el piso.',
+            responsible: 'Ariel Mella',
+            target_date: '2025-05-21',
+            status: 'Pendiente',
+            type: 'Seguridad',
+            company_id: companyId,
+            image_before: imgSafety,
+            card_number: 106,
+            status_color: 'bg-red-100 text-red-800'
         }
     ];
 
     // --- Quick Wins ---
     const quickWins = [
         {
-            title: 'Señalética de Velocidad',
-            description: 'Instalar letreros de 10km/h en entrada.',
+            title: 'Instalación Espejos Panorámicos',
+            description: 'Mejorar visibilidad en salida de camiones para evitar colisiones.',
+            status: 'done',
+            impact: 'Alto',
+            date: '2025-04-10',
+            likes: 12,
+            responsible: 'Ariel Mella',
+            deadline: '2025-04-15',
+            completion_comment: 'Instalados 2 espejos cconvexos de 80cm.',
+            completion_image_url: imgSafety,
+            image_url: null,
+            company_id: companyId
+        },
+        {
+            title: 'Digitalización Check-list Pre-uso',
+            description: 'Migrar de papel a tablet el control diario de flota.',
+            status: 'in_progress',
+            impact: 'Alto',
+            date: '2025-05-01',
+            likes: 8,
+            responsible: 'Equipo BeLean',
+            deadline: '2025-06-01',
+            image_url: null,
+            company_id: companyId
+        },
+        {
+            title: 'Rotulación de Basureros',
+            description: 'Implementar código de colores para reciclaje.',
             status: 'done',
             impact: 'Medio',
-            date: '2025-01-10',
-            likes: 3,
-            responsible: 'Maria Lagos',
-            deadline: '2025-01-15',
-            completion_comment: 'Instalados 3 letreros nuevos.',
-            completion_image_url: null,
+            date: '2025-03-20',
+            likes: 5,
+            responsible: 'Ariel Mella',
+            deadline: '2025-03-25',
+            completion_comment: 'Basureros azules, amarillos y negros instalados.',
             image_url: null,
             company_id: companyId
         },
         {
-            title: 'Iluminación LED en Fosas',
-            description: 'Cambiar focos antiguos por LED para mejor visibilidad.',
+            title: 'Meora Iluminación Taller',
+            description: 'Cambio a LED en fosas de mantención.',
             status: 'idea',
             impact: 'Alto',
-            date: '2025-02-20',
-            likes: 5,
-            responsible: 'Pedro Ruiz',
-            deadline: '2025-03-01',
-            image_url: null,
-            company_id: companyId
-        },
-        {
-            title: 'Organización de Archivos',
-            description: 'Digitalizar carpetas de 2023 para liberar espacio.',
-            status: 'in_progress', // Note: Check if 'in_progress' is valid status enum, usually 'idea' or 'done' in simple app, but keeping for now
-            impact: 'Bajo',
-            date: '2025-03-10',
-            likes: 2,
-            responsible: 'Ana López',
-            deadline: '2025-03-30',
-            image_url: null,
-            company_id: companyId
-        },
-        {
-            title: 'Kit de Derrames',
-            description: 'Implementar kit de contención en zona de cambio de aceite.',
-            status: 'done',
-            impact: 'Alto',
-            date: '2025-01-05',
-            likes: 8,
-            responsible: 'Prevención Riesgos',
-            deadline: '2025-01-20',
-            completion_comment: 'Kit comprado e instalado.',
-            completion_image_url: null,
+            date: '2025-05-19',
+            likes: 3,
+            responsible: 'Equipo BeLean',
+            deadline: '2025-06-15',
             image_url: null,
             company_id: companyId
         }
@@ -181,14 +209,28 @@ export const generateTransportesDemoData = async (companies, _addCompany) => {
     // --- VSM ---
     const vsmProjects = [
         {
-            name: 'Mantenimiento Preventivo Flota',
-            responsible: 'Carlos Ingeniero',
-            date: '2025-03-01',
+            name: 'VSM Actual - Mantenimiento Correctivo',
+            responsible: 'Ariel Mella',
+            date: '2025-04-15',
             status: 'current',
-            lead_time: '8 horas',
-            process_time: '2 horas',
-            efficiency_loop: '25%',
-            description: 'Flujo actual de mantenimiento de camiones tolva.',
+            lead_time: '4.5 Días',
+            process_time: '6 Horas',
+            efficiency_loop: '5.5%',
+            description: 'Análisis del flujo actual desde reporte de falla hasta entrega de equipo. Se detectan cuellos de botella en aprobación de repuestos.',
+            image_url: 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&w=1200&q=80', // Technical schematic look
+            miro_link: 'https://miro.com/app/board/uXjVO123456=/',
+            company_id: companyId
+        },
+        {
+            name: 'VSM Futuro - Flujo Continuo',
+            responsible: 'Equipo BeLean',
+            date: '2025-06-01',
+            status: 'future',
+            lead_time: '1 Día',
+            process_time: '5 Horas',
+            efficiency_loop: '20%',
+            description: 'Estado futuro deseado con aprobación automática de repuestos críticos y pre-picking.',
+            image_url: 'https://images.unsplash.com/photo-1531403009284-440f080d1e12?auto=format&fit=crop&w=1200&q=80', // Blueprint look
             company_id: companyId
         }
     ];
@@ -196,29 +238,32 @@ export const generateTransportesDemoData = async (companies, _addCompany) => {
     // --- A3 Projects ---
     const a3Projects = [
         {
-            title: 'Alta Rotación de Neumáticos',
-            background: 'Gasto excesivo en neumáticos traccionales.',
-            current_condition: 'Vida útil promedio 40.000km vs estándar 60.000km.',
-            goal: 'Aumentar vida útil a 55.000km.',
-            root_cause: 'Presión de aire incorrecta y falta de alineación.',
-            countermeasures: 'Checklist diario de presión y programa de alineación mensual.',
-            action_plan: 'Semana 1: Capacitación. Semana 2: Compra de medidores.',
-            follow_up: 'En monitoreo.',
-            responsible: 'Jefe de Taller',
+            title: 'Optimización de Consumo de Combustible',
+            background: 'El gasto en combustible representa el 40% de los costos operativos. Se ha detectado un aumento del 15% en el último Q.',
+            current_condition: 'Rendimiento promedio: 2.8 km/lt. Ralentí excesivo: 12%.',
+            goal: 'Aumentar rendimiento a 3.2 km/lt y reducir ralentí a 5%.',
+            root_cause: '1. Falta de capacitación en conducción eficiente. 2. Uso de aire acondicionado en detenciones prolongadas.',
+            countermeasures: '1. Programa de capacitación "Conducción Eeficiente". 2. Bonos por rendimiento. 3. Instalación de climatizadores autónomos.',
+            execution_plan: '- Mayo: Curso teórico\n- Junio: Pruebas en ruta\n- Julio: Implementación de bonos',
+            action_plan: [
+                { id: 1, step: 'Capacitación Choferes', who: 'Ariel Mella', when: '2025-05-30', status: 'Done' },
+                { id: 2, step: 'Configurar Telemetría', who: 'Equipo BeLean', when: '2025-06-15', status: 'In Progress' }
+            ],
+            follow_up: 'Primer grupo capacitado ha mejorado un 5% el rendimiento.',
+            responsible: 'Ariel Mella',
             status: 'En Proceso',
             company_id: companyId
         },
         {
-            title: 'Retrasos en Despachos AM',
-            background: 'Camiones salen con 45 min de retraso promedio.',
-            current_condition: 'Hora salida real 08:45 vs meta 08:00.',
-            goal: 'Reducir retraso a 10 min máx.',
-            root_cause: 'Documentación no lista al cargar.',
-            countermeasures: 'Digitalizar guías de despacho la noche anterior.',
-            action_plan: 'Implementar tablet en portería.',
-            follow_up: 'Piloto iniciado.',
-            responsible: 'Gerente Logística',
-            status: 'Planificado',
+            title: 'Reducción de Tiempos de Carga',
+            background: 'Los camiones esperan promedio 45 minutos antes de ingresar a rampa.',
+            current_condition: 'Tiempo ciclo total: 120 min. Valor Agregado: 35 min.',
+            goal: 'Reducir tiempo ciclo a 60 min.',
+            root_cause: 'Descoordinación entre llegada de camión y disponibilidad de andén.',
+            countermeasures: 'Implementar sistema de agendamiento de horas (Booking).',
+            execution_plan: 'Desarrollo de app de citas y marcha blanca en Centro A.',
+            responsible: 'Equipo BeLean',
+            status: 'Nuevo',
             company_id: companyId
         }
     ];
@@ -243,7 +288,7 @@ export const generateTransportesDemoData = async (companies, _addCompany) => {
         const { error: errA3 } = await supabase.from('a3_projects').insert(a3Projects);
         if (errA3) console.error("Error inserting A3:", errA3);
 
-        alert(`¡Demo "Transportes del Sur" cargada exitosamente!\nEmpresa ID: ${companyId}\n\nLos datos se han guardado en la base de datos.`);
+        alert(`¡Demo Corporativa "Transportes del Sur" Generada!\n\nDatos creados por: Ariel Mella & Equipo BeLean.\nMódulos cargados: 5S, Quick Wins, VSM, A3.`);
         window.location.reload();
 
     } catch (error) {

@@ -16,16 +16,21 @@ import {
     AlertCircle,
     Info,
     MessageSquare,
-    Send
+    Send,
+    ArrowRightCircle,
+    ListTodo,
+    Maximize2,
+    Minimize2
 } from 'lucide-react';
 import { prepareCompanyData, generateAIInsight, sendChatMessage, shouldGenerateNewInsight } from '../services/geminiService';
 
-const AIConsultant = ({ data, companyName, apiKey, fullScreen = false }) => {
+const AIConsultant = ({ data, companyName, apiKey, fullScreen = false, isSyncing = false, fetchError = null }) => {
     const [insight, setInsight] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [expanded, setExpanded] = useState(true);
     const [showCoaching, setShowCoaching] = useState(false);
+    const [isMaximized, setIsMaximized] = useState(false);
 
     // Chat State
     const [activeTab, setActiveTab] = useState('analysis'); // 'analysis' | 'chat'
@@ -35,22 +40,20 @@ const AIConsultant = ({ data, companyName, apiKey, fullScreen = false }) => {
     const chatEndRef = useRef(null);
 
     // Load cached insight on mount
+    // Load cached insight on mount
     useEffect(() => {
         const cached = localStorage.getItem(`ai_insight_${companyName || 'default'}`);
         if (cached) {
             try {
                 const parsed = JSON.parse(cached);
-                setInsight(parsed);
-
-                // Check if we should auto-generate new insight
-                if (shouldGenerateNewInsight(parsed) && apiKey) {
-                    generateInsight();
+                // Only set if valid
+                if (parsed && parsed.resumenEjecutivo && parsed.resumenEjecutivo.trim().length > 0) {
+                    setInsight(parsed);
                 }
             } catch (e) {
                 console.error('Error parsing cached insight:', e);
             }
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [companyName]);
 
     // Auto-scroll chat
@@ -74,13 +77,18 @@ const AIConsultant = ({ data, companyName, apiKey, fullScreen = false }) => {
             const newInsight = await generateAIInsight(preparedData, companyName, apiKey);
 
             setInsight(newInsight);
-            localStorage.setItem(`ai_insight_${companyName || 'default'}`, JSON.stringify(newInsight));
+
+            try {
+                localStorage.setItem(`ai_insight_${companyName || 'default'}`, JSON.stringify(newInsight));
+            } catch (e) {
+                console.warn('Could not save insight to localStorage (Quota Exceeded?):', e);
+            }
 
             // Generate initial chat greeting if empty
             if (chatHistory.length === 0) {
                 setChatHistory([{
                     role: 'model',
-                    content: `Hola, he analizado los datos de ${companyName || 'la empresa'}. Veo ${newInsight?.a3?.details?.length || 0} proyectos A3 activos y ${newInsight?.fiveS?.pending || 0} tarjetas 5S pendientes. ¿En qué puedo profundizar?`
+                    content: `Hola, he analizado los datos de ${companyName || 'la empresa'}. Veo ${preparedData?.a3?.total || 0} proyectos A3 activos y ${preparedData?.fiveS?.pending + preparedData?.fiveS?.inProcess || 0} tarjetas 5S pendientes. ¿En qué puedo profundizar?`
                 }]);
             }
         } catch (err) {
@@ -183,15 +191,22 @@ const AIConsultant = ({ data, companyName, apiKey, fullScreen = false }) => {
         );
     }
 
+    const containerClasses = isMaximized
+        ? "fixed inset-0 z-50 bg-white h-screen w-screen rounded-none flex flex-col"
+        : `bg-white rounded-xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 overflow-hidden flex flex-col ${fullScreen ? 'h-full' : 'max-h-[800px]'}`;
+
+    // In maximized mode, ensure it's always expanded
+    const isExpanded = isMaximized ? true : expanded;
+
     return (
-        <div className={`bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 overflow-hidden flex flex-col ${fullScreen ? 'h-full' : 'max-h-[800px]'}`}>
+        <div className={containerClasses} style={isMaximized ? { margin: 0 } : {}}>
             {/* Header */}
             <div
                 className="bg-gradient-to-r from-slate-800 via-slate-800 to-cyan-900 p-0 flex flex-col shrink-0"
             >
                 <div
-                    className={`p-5 flex items-center justify-between ${!fullScreen ? 'cursor-pointer' : ''}`}
-                    onClick={() => !fullScreen && setExpanded(!expanded)}
+                    className={`p-3 lg:p-4 flex items-center justify-between ${!fullScreen && !isMaximized ? 'cursor-pointer' : ''}`}
+                    onClick={() => !fullScreen && !isMaximized && setExpanded(!expanded)}
                 >
                     <div className="flex items-center gap-3">
                         <div className="p-2.5 bg-gradient-to-br from-cyan-400 to-cyan-600 rounded-xl shadow-lg shadow-cyan-500/30">
@@ -207,26 +222,38 @@ const AIConsultant = ({ data, companyName, apiKey, fullScreen = false }) => {
                     </div>
                     <div className="flex items-center gap-3">
                         {insight?.generatedAt && (
-                            <span className="text-[10px] text-slate-500 hidden sm:block">
-                                {formatDate(insight.generatedAt)}
+                            <span className="text-[10px] text-slate-500 hidden sm:block text-right">
+                                {formatDate(insight.generatedAt)} <br />
+                                <span className="text-cyan-600 font-bold">
+                                    {(data?.fiveS?.length || 0) + (data?.a3?.length || 0)} registros analizados
+                                </span>
                             </span>
                         )}
                         <button
                             onClick={(e) => { e.stopPropagation(); generateInsight(); }}
-                            disabled={loading}
-                            className="p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors disabled:opacity-50"
-                            title="Regenerar análisis"
+                            disabled={loading || isSyncing || !!fetchError}
+                            className={`p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
+                            title={isSyncing ? "Sincronizando historial completo..." : "Regenerar análisis"}
                         >
-                            <RefreshCw size={16} className={`text-white ${loading ? 'animate-spin' : ''}`} />
+                            <RefreshCw size={16} className={`text-white ${loading || isSyncing ? 'animate-spin' : ''}`} />
                         </button>
-                        <button className="p-1 text-slate-400">
-                            {!fullScreen && (expanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />)}
+                        <button
+                            onClick={(e) => { e.stopPropagation(); setIsMaximized(!isMaximized); }}
+                            className="p-2 text-slate-400 hover:text-white transition-colors hover:bg-white/10 rounded-lg"
+                            title={isMaximized ? "Minimizar" : "Maximizar pantalla completa"}
+                        >
+                            {isMaximized ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
                         </button>
+                        {!isMaximized && (
+                            <button className="p-1 text-slate-400">
+                                {!fullScreen && (expanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />)}
+                            </button>
+                        )}
                     </div>
                 </div>
 
                 {/* Tabs */}
-                {expanded && (
+                {isExpanded && (
                     <div className="flex bg-slate-900/50 backdrop-blur-sm px-2 pt-2 gap-1 border-t border-white/5">
                         <button
                             onClick={() => setActiveTab('analysis')}
@@ -251,19 +278,21 @@ const AIConsultant = ({ data, companyName, apiKey, fullScreen = false }) => {
             </div>
 
             {/* Body */}
-            {expanded && (
+            {isExpanded && (
                 <div className="flex-1 overflow-hidden flex flex-col bg-slate-50 relative min-h-[400px]">
 
-                    {/* LOADING OVERLAY */}
+                    {/* LOADING OVERLAY - Always on top if loading, but allows content underneath */}
                     {loading && (
-                        <div className="absolute inset-0 z-20 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center">
+                        <div className="absolute inset-0 z-20 bg-white/60 backdrop-blur-[2px] flex flex-col items-center justify-center transition-all duration-300">
                             <div className="relative">
-                                <Brain size={48} className="text-slate-200 animate-pulse" />
+                                <Brain size={48} className="text-slate-300 animate-pulse" />
                                 <div className="absolute inset-0 flex items-center justify-center">
                                     <div className="w-12 h-12 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin"></div>
                                 </div>
                             </div>
-                            <p className="mt-4 text-sm text-slate-500 font-medium">Analizando datos...</p>
+                            <p className="mt-4 text-sm text-slate-600 font-bold animate-pulse">
+                                {insight ? 'Actualizando análisis...' : 'Generando análisis inicial...'}
+                            </p>
                         </div>
                     )}
 
@@ -286,19 +315,29 @@ const AIConsultant = ({ data, companyName, apiKey, fullScreen = false }) => {
                     {/* NO INSIGHT */}
                     {!insight && !loading && !error && (
                         <div className="flex-1 flex flex-col items-center justify-center p-8">
-                            <Brain size={48} className="text-slate-200 mb-4" />
-                            <p className="text-slate-500 mb-4">No hay análisis generado aún</p>
+                            <Brain size={48} className={`text-slate-200 mb-4 ${isSyncing ? 'animate-pulse' : ''}`} />
+                            <p className="text-slate-500 mb-4">
+                                {isSyncing ? 'Sincronizando historial completo...' : 'No hay análisis generado aún'}
+                            </p>
                             <button
                                 onClick={generateInsight}
-                                className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg text-sm font-bold transition-colors"
+                                disabled={isSyncing}
+                                className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-lg text-sm font-bold transition-colors flex items-center gap-2"
                             >
-                                Generar Análisis IA
+                                {isSyncing ? (
+                                    <>
+                                        <div className="w-4 h-4 border-2 border-white/50 border-t-white rounded-full animate-spin"></div>
+                                        Sincronizando...
+                                    </>
+                                ) : (
+                                    'Generar Análisis IA'
+                                )}
                             </button>
                         </div>
                     )}
 
-                    {/* CONTENT - ANALYSIS TAB */}
-                    {insight && !loading && !error && activeTab === 'analysis' && (
+                    {/* CONTENT - ANALYSIS TAB - Render if insight exists (even if loading) */}
+                    {insight && !error && activeTab === 'analysis' && (
                         <div className="flex-1 overflow-y-auto p-5 space-y-5 animate-in fade-in slide-in-from-left-4 duration-300">
 
                             {/* Executive Summary */}
@@ -368,6 +407,37 @@ const AIConsultant = ({ data, companyName, apiKey, fullScreen = false }) => {
                                 </div>
                             )}
 
+                            {/* Next Steps Section */}
+                            {insight.proximosPasos?.length > 0 && (
+                                <div>
+                                    <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                                        <ListTodo size={14} /> Próximos Pasos Sugeridos
+                                    </h4>
+                                    <div className="space-y-3">
+                                        {insight.proximosPasos.map((paso, i) => (
+                                            <div key={i} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:border-cyan-300 transition-colors group">
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <div className="flex items-start gap-3">
+                                                        <div className={`mt-1 p-1.5 rounded-lg shrink-0 ${paso.prioridad === 'alta' ? 'bg-red-100 text-red-600' : (paso.prioridad === 'media' ? 'bg-amber-100 text-amber-600' : 'bg-blue-100 text-blue-600')}`}>
+                                                            <ArrowRightCircle size={16} />
+                                                        </div>
+                                                        <div>
+                                                            <h5 className="font-bold text-slate-800 text-sm group-hover:text-cyan-700 transition-colors">{paso.titulo}</h5>
+                                                            <p className="text-xs text-slate-500 mt-1 leading-relaxed">{paso.descripcion}</p>
+                                                        </div>
+                                                    </div>
+                                                    {paso.prioridad && (
+                                                        <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${paso.prioridad === 'alta' ? 'bg-red-50 text-red-600 border border-red-100' : (paso.prioridad === 'media' ? 'bg-amber-50 text-amber-600 border border-amber-100' : 'bg-blue-50 text-blue-600 border border-blue-100')}`}>
+                                                            {paso.prioridad}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
                             {/* Coaching Section */}
                             {insight.coachingPracticas?.length > 0 && (
                                 <div className="border border-cyan-100 rounded-xl overflow-hidden bg-white shadow-sm">
@@ -413,8 +483,8 @@ const AIConsultant = ({ data, companyName, apiKey, fullScreen = false }) => {
                         </div>
                     )}
 
-                    {/* CONTENT - CHAT TAB */}
-                    {insight && !loading && !error && activeTab === 'chat' && (
+                    {/* CONTENT - CHAT TAB - Render if insight exists (even if loading) */}
+                    {insight && !error && activeTab === 'chat' && (
                         <div className="flex-1 flex flex-col h-full animate-in fade-in slide-in-from-right-4 duration-300">
 
                             {/* Chat History */}

@@ -5,7 +5,7 @@ import { supabase } from '../supabaseClient';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import HeaderWithFilter from '../components/HeaderWithFilter';
-import { Plus, Search, Camera, X, Calendar, MapPin, User, FileText, CheckCircle, AlertCircle, Clock, BarChart as BarIcon, ChevronDown, Activity, ArrowRight, Trash2, CloudOff } from 'lucide-react';
+import { Plus, Search, Camera, X, Calendar, MapPin, User, FileText, CheckCircle, AlertCircle, Clock, BarChart as BarIcon, ChevronDown, Activity, ArrowRight, Trash2, CloudOff, Save, Building } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { AuditService } from '../services/AuditService';
 import ImageUpload from '../components/ImageUpload';
@@ -14,13 +14,29 @@ import MobileFab from '../components/mobile/MobileFab';
 import CameraCapture from '../components/mobile/CameraCapture';
 
 const FiveSPage = () => {
-    const { user, companyUsers, globalFilterCompanyId } = useAuth();
+    const { user, globalFilterCompanyId, companyUsers } = useAuth();
+    // Use the complete destructuring from legacy code
     const { fiveSCards: cards, loadingFiveS: loading, fetchFiveSCards, addFiveSCard, updateFiveSCard, removeFiveSCard } = useData();
     const location = useLocation();
+
+    // State
     const [selectedCard, setSelectedCard] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
+    const [statusFilter, setStatusFilter] = useState('Todos');
     const [filterResponsible, setFilterResponsible] = useState('');
     const [filterLocation, setFilterLocation] = useState('');
+
+    // New Companies State
+    const [companies, setCompanies] = useState([]);
+
+    // Fetch Companies for Global Admin
+    useEffect(() => {
+        if (user?.isGlobalAdmin) {
+            supabase.from('companies').select('id, name').then(({ data }) => {
+                if (data) setCompanies(data);
+            });
+        }
+    }, [user]);
 
     const [showHistory, setShowHistory] = useState(false);
 
@@ -30,12 +46,24 @@ const FiveSPage = () => {
     // Derive offline count directly from cards to ensure UI consistency
     const offlineCount = useMemo(() => cards.filter(c => c.isOffline).length, [cards]);
 
-    // Fetch on Mount
+    // View Mode State: 'active' or 'history'
+    const [viewMode, setViewMode] = useState('active');
+
+    const handleViewModeChange = (mode) => {
+        setViewMode(mode);
+        // Client-side filtering only
+    };
+
+    // Initial Fetch handled by DataContext background prefetch now.
+    // We only refetch if user changes view mode or explicitly refreshes.
+
+    // Auto-refresh when entering page if data is empty (and not loading), just in case prefetch failed or timed out
+    // Initial Fetch handled by DataContext background prefetch now.
+    // We only refetch if user changes view mode or explicitly refreshes.
     useEffect(() => {
-        if (user) {
-            fetchFiveSCards();
-        }
-    }, [user, fetchFiveSCards]);
+        // Fetch ALL cards so charts show complete data
+        fetchFiveSCards('all');
+    }, [fetchFiveSCards, user?.companyId, globalFilterCompanyId]); // Trigger refetch on filter change
 
     const uploadFileToSupabase = useCallback(async (file) => {
         const fileExt = file.name ? file.name.split('.').pop() : 'jpg';
@@ -94,17 +122,43 @@ const FiveSPage = () => {
                         urlAfter = await uploadFileToSupabase(cardRecord.files.imageAfter);
                     }
 
+                    // RESOLVE COMPANY ID logic
+                    let finalCompanyId = cardRecord.data.company_id;
+                    if (!finalCompanyId && user?.companyId) finalCompanyId = user.companyId;
+                    if (!finalCompanyId && globalFilterCompanyId !== 'all') finalCompanyId = globalFilterCompanyId;
+
+                    if (!finalCompanyId) {
+                        // Fallback for Superadmin or Orphans: don't crash loop, but log error
+                        console.error(`Skipping card ${cardRecord.tempId}: No company association found.`);
+                        errors.push(`Tarjeta ${cardRecord.tempId}: Sin empresa asociada.`);
+                        errorCount++;
+                        continue;
+                    }
+
                     // Prepare payload for Supabase
                     const payload = {
                         ...cardRecord.data,
                         image_before: urlBefore,
                         image_after: urlAfter,
-                        company_id: cardRecord.data.company_id || user.companyId || (globalFilterCompanyId !== 'all' ? globalFilterCompanyId : null)
+                        company_id: finalCompanyId
                     };
 
                     // Insert to Supabase
+                    // Insert to Supabase
                     const { error } = await supabase.from('five_s_cards').insert([payload]);
-                    if (error) throw new Error(error.message);
+
+                    if (error) {
+                        // Check for RLS Policy Violation
+                        if (error.message.includes("row-level security policy") || error.code === '42501') {
+                            console.warn(`RLS Violation for card ${cardRecord.tempId}. Retrying with current user company...`);
+                            // Retry with current user's company ID as fallback
+                            const fallbackPayload = { ...payload, company_id: user.companyId };
+                            const { error: retryError } = await supabase.from('five_s_cards').insert([fallbackPayload]);
+                            if (retryError) throw new Error(`RLS Retry Failed: ${retryError.message}`);
+                        } else {
+                            throw new Error(error.message);
+                        }
+                    }
 
                     // Remove from IDB on success
                     await offlineService.deleteCard(cardRecord.tempId);
@@ -163,14 +217,24 @@ const FiveSPage = () => {
         if (!user) return [];
 
         // ADMIN FILTER LOGIC
-        const isSuperAdmin = user.role === 'admin' || user.email === 'ariel.mellag@gmail.com';
+        // STRICT PERMISSION CHECK: usage of 'isGlobalAdmin' from AuthContext
+        const isSuperAdmin = user.isGlobalAdmin;
         const targetCompanyId = isSuperAdmin ? globalFilterCompanyId : user.companyId;
 
-        if (targetCompanyId === 'all') return cards;
-        if (!targetCompanyId) return cards; // If no company ID (e.g. fallback), show what RLS returns
+        if (targetCompanyId === 'all') {
+            // Only Super Admins can see 'all'
+            return isSuperAdmin ? cards : [];
+        }
+        if (!targetCompanyId) return cards; // Fallback
 
-        // Use loose equality (==) to handle string '1' vs number 1 mismatch
-        return cards.filter(c => c.companyId == targetCompanyId || c.responsible === user.name || !c.companyId);
+        // Strict filtering for Superadmin: Show ONLY matches or nothing if filter is active
+        if (isSuperAdmin) {
+            // Use loose equality (==) to handle string '1' vs number 1 mismatch
+            return cards.filter(c => c.companyId == targetCompanyId);
+        }
+
+        // Strict Company Filter for Standard Admins
+        return cards.filter(c => c.companyId == targetCompanyId || (!c.companyId && isSuperAdmin));
     }, [cards, user, globalFilterCompanyId]);
 
     // Listas para filtros y autocompletar
@@ -247,6 +311,16 @@ const FiveSPage = () => {
     }, [filteredCards]);
 
 
+    // Filter for Grid Display (Active vs History)
+    const gridCards = useMemo(() => {
+        return filteredCards.filter(c => {
+            if (viewMode === 'active') return c.status !== 'Cerrado';
+            if (viewMode === 'history') return c.status === 'Cerrado';
+            return true;
+        });
+    }, [filteredCards, viewMode]);
+
+
     // Abrir Modal para Nueva Tarjeta
     const handleNewCard = () => {
         setSelectedCard({
@@ -270,7 +344,10 @@ const FiveSPage = () => {
 
     // Abrir Modal Edición
     const handleCardClick = (card) => {
-        setSelectedCard({ ...card });
+        setSelectedCard({
+            ...card,
+            company_id: card.companyId || card.company_id // Normalize for form selector
+        });
     };
 
     // ... existing helper
@@ -291,13 +368,22 @@ const FiveSPage = () => {
         }
 
         // AUTO-ASSIGN COMPANY based on Responsible
-        let idToAssign = selectedCard.companyId;
-        if (companyUsers && selectedCard.responsible) {
+        let idToAssign = selectedCard.company_id || selectedCard.companyId;
+
+        // If we don't have an explicit company assigned, try to deduce from responsible user
+        if (!idToAssign && companyUsers && selectedCard.responsible) {
             const responsibleUser = companyUsers.find(u => u.name === selectedCard.responsible);
             if (responsibleUser && responsibleUser.company_id) idToAssign = responsibleUser.company_id;
         }
+
+        // Fallback to current context
         if (!idToAssign) {
             idToAssign = user.companyId || (globalFilterCompanyId !== 'all' ? globalFilterCompanyId : null);
+        }
+
+        // Validate Company ID
+        if (!idToAssign) {
+            console.warn("No company ID found for card. Card will be saved without company association.");
         }
 
         // Prepare Base Data
@@ -361,8 +447,21 @@ const FiveSPage = () => {
 
             } else {
                 // --- ONLINE SAVE ---
+                // --- ONLINE SAVE ---
                 let finalUrlBefore = selectedCard.imageBefore;
                 let finalUrlAfter = selectedCard.imageAfter;
+
+                // Guard: Prevent saving Blob URLs without upload
+                if (finalUrlBefore && typeof finalUrlBefore === 'string' && finalUrlBefore.startsWith('blob:') && !selectedCard.imageBeforeFile) {
+                    console.error("Invalid state: Blob URL present but no file to upload (Before)", selectedCard);
+                    alert("Error de estado: Imagen 'Antes' inválida. Por favor intenta seleccionarla nuevamente.");
+                    return;
+                }
+                if (finalUrlAfter && typeof finalUrlAfter === 'string' && finalUrlAfter.startsWith('blob:') && !selectedCard.imageAfterFile) {
+                    console.error("Invalid state: Blob URL present but no file to upload (After)", selectedCard);
+                    alert("Error de estado: Imagen 'Después' inválida. Por favor intenta seleccionarla nuevamente.");
+                    return;
+                }
 
                 if (selectedCard.imageBeforeFile) {
                     finalUrlBefore = await uploadFileToSupabase(selectedCard.imageBeforeFile);
@@ -392,14 +491,28 @@ const FiveSPage = () => {
                     // Optimistic update via context
                     updateFiveSCard(selectedCard.id, {
                         ...cardData,
+                        companyId: cardData.company_id, // Fix: Explicitly update camelCase field for frontend state
                         statusColor: cardData.status === 'Cerrado' ? '#10b981' : (cardData.status === 'En Proceso' ? '#f59e0b' : '#ef4444')
                     });
                 } else {
                     // Insert
-                    const { data, error } = await supabase
+                    let { data, error } = await supabase
                         .from('five_s_cards')
                         .insert([cardData])
                         .select();
+
+                    // RLS Fallback Retry
+                    if (error && (error.message.includes("row-level security policy") || error.code === '42501')) {
+                        console.warn("RLS Violation during insert. Retrying with current user company...");
+                        const fallbackData = { ...cardData, company_id: user.companyId };
+                        const retryResult = await supabase
+                            .from('five_s_cards')
+                            .insert([fallbackData])
+                            .select();
+
+                        data = retryResult.data;
+                        error = retryResult.error;
+                    }
 
                     if (error) throw error;
 
@@ -416,7 +529,13 @@ const FiveSPage = () => {
             }
         } catch (error) {
             console.error("Error saving card:", error);
-            alert("Error al guardar la tarjeta: " + error.message);
+            let msg = error.message;
+            if (msg.includes("violates not-null constraint") || msg.includes("company_card_counters")) {
+                msg = "Error interno de base de datos (conteo de tarjetas). Por favor contacta a soporte.";
+            } else if (msg.includes("upload")) {
+                msg = "Error al subir imagen. Verifica tu conexión.";
+            }
+            alert("Error al guardar la tarjeta: " + msg);
         }
     };
 
@@ -467,10 +586,12 @@ const FiveSPage = () => {
 
     const handleFileSelect = (field, file, previewUrl) => {
         // field is 'imageBefore' or 'imageAfter'
-        // We set the preview URL to the main field so the UI shows it
-        // We set the FILE object to a shadow field 'imageBeforeFile'
-        updateField(field, previewUrl);
-        updateField(field + 'File', file);
+        // Atomic update to ensure both URL and File are set together
+        setSelectedCard(prev => ({
+            ...prev,
+            [field]: previewUrl,
+            [`${field}File`]: file
+        }));
     };
 
     // Replace updateField to handle generic
@@ -492,6 +613,37 @@ const FiveSPage = () => {
                     <span>Nueva Tarjeta</span>
                 </button>
             </HeaderWithFilter>
+
+            {/* View Mode Toggles */}
+            <div className="flex gap-2">
+                <button
+                    onClick={() => handleViewModeChange('active')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${viewMode === 'active'
+                        ? 'bg-brand-600 text-white shadow-md'
+                        : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
+                        }`}
+                >
+                    Activas
+                </button>
+                <button
+                    onClick={() => handleViewModeChange('history')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${viewMode === 'history'
+                        ? 'bg-slate-800 text-white shadow-md'
+                        : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
+                        }`}
+                >
+                    Historial (Cerradas)
+                </button>
+                <button
+                    onClick={() => handleViewModeChange('all')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${viewMode === 'all'
+                        ? 'bg-blue-600 text-white shadow-md'
+                        : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
+                        }`}
+                >
+                    Todas
+                </button>
+            </div>
 
             {/* Action Bar & Filters */}
             <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-wrap gap-4 items-center">
@@ -607,8 +759,8 @@ const FiveSPage = () => {
                             </div>
                         </div>
                     ))
-                ) : filteredCards.length > 0 ?
-                    filteredCards.map((card) => (
+                ) : gridCards.length > 0 ?
+                    gridCards.map((card) => (
                         <div
                             key={card.id}
                             className={`group bg-white rounded-xl shadow-sm border ${card.isOffline ? 'border-dashed border-slate-400 bg-slate-50' : 'border-slate-200'} overflow-hidden hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer flex flex-col h-full`}
@@ -632,7 +784,7 @@ const FiveSPage = () => {
                                         ? 'bg-slate-200 text-slate-600 border-slate-300'
                                         : 'bg-slate-100 text-slate-600 border-slate-200 group-hover:bg-brand-50 group-hover:text-brand-600 group-hover:border-brand-100'
                                         }`}>
-                                        #{!isNaN(card.cardNumber) ? String(card.cardNumber).padStart(3, '0') : '?'}
+                                        #{!isNaN(card.cardNumber) ? String(card.cardNumber).padStart(3, '0') : (card.cardNumber || '?')}
                                     </span>
                                     {card.isOffline ? (
                                         <span className="text-xs text-slate-500 font-bold flex items-center gap-1 bg-yellow-100 px-2 py-0.5 rounded-full border border-yellow-200">
@@ -703,386 +855,417 @@ const FiveSPage = () => {
             </div>
 
             {/* KPI Dashboard Section (Footer) */}
-            {filteredCards.length > 0 && (
-                <div className="bg-white rounded-2xl shadow-md border border-slate-200 p-8 mt-8">
-                    <div className="flex items-center gap-3 mb-8 pb-4 border-b border-slate-100">
-                        <div className="p-2.5 bg-brand-50 text-brand-600 rounded-lg">
-                            <BarIcon size={24} />
-                        </div>
-                        <div>
-                            <h3 className="text-xl font-bold text-slate-900">Indicadores de Gestión</h3>
-                            <p className="text-sm text-slate-500">Análisis visual de anomalías y mejoras</p>
-                        </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                        {/* Stats Cards Column */}
-                        <div className="grid grid-cols-2 gap-4 content-start">
-                            <StatCard
-                                title="Total Tarjetas"
-                                value={kpiData.total}
-                                variant="blue"
-                                type="outlined"
-                            />
-                            <StatCard
-                                title="Cumplimiento"
-                                value={`${kpiData.completionRate}%`}
-                                variant="green"
-                                type="outlined"
-                            />
-                            <StatCard
-                                title="Pendientes"
-                                value={kpiData.pending}
-                                variant="red"
-                                type="outlined"
-                            />
-                            <StatCard
-                                title="En Proceso"
-                                value={kpiData.inProcess}
-                                variant="orange"
-                                type="outlined"
-                            />
-                        </div>
-
-                        {/* Charts Columns */}
-                        <div className="bg-slate-50/50 rounded-xl p-5 border border-slate-100">
-                            <h4 className="text-center text-xs font-bold text-slate-500 mb-6 uppercase tracking-wider flex items-center justify-center gap-2">
-                                Distribución por Estado
-                            </h4>
-                            <div className="h-[200px]" style={{ width: '100%', height: 200 }}>
-                                <ResponsiveContainer width="100%" height="100%" minWidth={100} minHeight={100}>
-                                    <PieChart>
-                                        <Pie
-                                            data={kpiData.statusData}
-                                            cx="50%"
-                                            cy="50%"
-                                            innerRadius={60}
-                                            outerRadius={80}
-                                            paddingAngle={5}
-                                            dataKey="value"
-                                            stroke="none"
-                                        >
-                                            {kpiData.statusData.map((entry, index) => (
-                                                <Cell key={`cell-${index}`} fill={entry.color} />
-                                            ))}
-                                        </Pie>
-                                        <RechartsTooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }} />
-                                        <Legend verticalAlign="bottom" height={36} iconType="circle" />
-                                    </PieChart>
-                                </ResponsiveContainer>
+            {
+                filteredCards.length > 0 && (
+                    <div className="bg-white rounded-2xl shadow-md border border-slate-200 p-8 mt-8">
+                        <div className="flex items-center gap-3 mb-8 pb-4 border-b border-slate-100">
+                            <div className="p-2.5 bg-brand-50 text-brand-600 rounded-lg">
+                                <BarIcon size={24} />
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-bold text-slate-900">Indicadores de Gestión</h3>
+                                <p className="text-sm text-slate-500">Análisis visual de anomalías y mejoras</p>
                             </div>
                         </div>
 
-                        <div className="bg-slate-50/50 rounded-xl p-5 border border-slate-100">
-                            <h4 className="text-center text-xs font-bold text-slate-500 mb-6 uppercase tracking-wider flex items-center justify-center gap-2">
-                                Top Áreas con Hallazgos
-                            </h4>
-                            <div className="h-[200px]" style={{ width: '100%', height: 200 }}>
-                                <ResponsiveContainer width="100%" height="100%" minWidth={100} minHeight={100}>
-                                    <BarChart data={kpiData.locationData} layout="vertical" margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
-                                        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
-                                        <XAxis type="number" hide />
-                                        <YAxis
-                                            type="category"
-                                            dataKey="name"
-                                            width={100}
-                                            tick={{ fontSize: 11, fill: '#64748b' }}
-                                            axisLine={false}
-                                            tickLine={false}
-                                        />
-                                        <RechartsTooltip cursor={{ fill: '#f1f5f9' }} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }} />
-                                        <Bar dataKey="count" fill="#6366f1" radius={[0, 4, 4, 0]} barSize={20} />
-                                    </BarChart>
-                                </ResponsiveContainer>
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                            {/* Stats Cards Column */}
+                            <div className="grid grid-cols-2 gap-4 content-start">
+                                <StatCard
+                                    title="Total Tarjetas"
+                                    value={kpiData.total}
+                                    variant="blue"
+                                    type="outlined"
+                                />
+                                <StatCard
+                                    title="Cumplimiento"
+                                    value={`${kpiData.completionRate}%`}
+                                    variant="green"
+                                    type="outlined"
+                                />
+                                <StatCard
+                                    title="Pendientes"
+                                    value={kpiData.pending}
+                                    variant="red"
+                                    type="outlined"
+                                />
+                                <StatCard
+                                    title="En Proceso"
+                                    value={kpiData.inProcess}
+                                    variant="orange"
+                                    type="outlined"
+                                />
+                            </div>
+
+                            {/* Charts Columns */}
+                            <div className="bg-slate-50/50 rounded-xl p-5 border border-slate-100">
+                                <h4 className="text-center text-xs font-bold text-slate-500 mb-6 uppercase tracking-wider flex items-center justify-center gap-2">
+                                    Distribución por Estado
+                                </h4>
+                                <div className="h-[200px]" style={{ width: '100%', height: 200 }}>
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <PieChart>
+                                            <Pie
+                                                data={kpiData.statusData}
+                                                cx="50%"
+                                                cy="50%"
+                                                innerRadius={60}
+                                                outerRadius={80}
+                                                paddingAngle={5}
+                                                dataKey="value"
+                                                stroke="none"
+                                            >
+                                                {kpiData.statusData.map((entry, index) => (
+                                                    <Cell key={`cell-${index}`} fill={entry.color} />
+                                                ))}
+                                            </Pie>
+                                            <RechartsTooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }} />
+                                            <Legend verticalAlign="bottom" height={36} iconType="circle" />
+                                        </PieChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            </div>
+
+                            <div className="bg-slate-50/50 rounded-xl p-5 border border-slate-100">
+                                <h4 className="text-center text-xs font-bold text-slate-500 mb-6 uppercase tracking-wider flex items-center justify-center gap-2">
+                                    Top Áreas con Hallazgos
+                                </h4>
+                                <div className="h-[200px]" style={{ width: '100%', height: 200 }}>
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <BarChart data={kpiData.locationData} layout="vertical" margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+                                            <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
+                                            <XAxis type="number" hide />
+                                            <YAxis
+                                                type="category"
+                                                dataKey="name"
+                                                width={100}
+                                                tick={{ fontSize: 11, fill: '#64748b' }}
+                                                axisLine={false}
+                                                tickLine={false}
+                                            />
+                                            <RechartsTooltip cursor={{ fill: '#f1f5f9' }} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }} />
+                                            <Bar dataKey="count" fill="#6366f1" radius={[0, 4, 4, 0]} barSize={20} />
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
             {/* Modal de Detalle */}
-            {selectedCard && (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-0 md:p-4 animate-in fade-in duration-200" onClick={handleCloseModal}>
-                    <div
-                        className="bg-white rounded-none md:rounded-2xl shadow-2xl w-full h-full md:h-auto max-w-4xl max-h-[100vh] md:max-h-[90vh] overflow-y-auto flex flex-col"
-                        onClick={e => e.stopPropagation()}
-                    >
-                        {/* Modal Header with Action Icons */}
-                        <div className="px-4 md:px-8 py-4 border-b border-slate-100 flex justify-between items-center bg-white sticky top-0 z-10 rounded-t-2xl">
-                            <div className="flex items-center gap-3">
-                                <div className={`p-2.5 rounded-xl ${selectedCard.id ? 'bg-indigo-50 text-indigo-600' : 'bg-brand-50 text-brand-600'}`}>
-                                    {selectedCard.id ? <FileText size={20} /> : <Plus size={20} />}
+            {
+                selectedCard && (
+                    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-0 md:p-4 animate-in fade-in duration-200" onClick={(e) => { if (e.target === e.currentTarget) handleCloseModal(); }}>
+                        <div
+                            className="bg-white rounded-none md:rounded-2xl shadow-2xl w-full h-full md:h-auto max-w-4xl max-h-[100vh] md:max-h-[90vh] overflow-y-auto flex flex-col"
+                        >
+                            {/* Modal Header with Action Icons */}
+                            <div className="px-4 md:px-8 py-4 border-b border-slate-100 flex justify-between items-center bg-white sticky top-0 z-10 rounded-t-2xl">
+                                <div className="flex items-center gap-3">
+                                    <div className={`p-2.5 rounded-xl ${selectedCard.id ? 'bg-indigo-50 text-indigo-600' : 'bg-brand-50 text-brand-600'}`}>
+                                        {selectedCard.id ? <FileText size={20} /> : <Plus size={20} />}
+                                    </div>
+                                    <div>
+                                        <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                                            {selectedCard.id ? (
+                                                <>
+                                                    Tarjeta {companies.find(c => c.id === selectedCard.company_id)?.name} #{String(selectedCard.cardNumber).padStart(3, '0')}
+                                                </>
+                                            ) : 'Nueva Tarjeta 5S'}
+                                        </h2>
+                                        <p className="text-xs text-slate-500 hidden sm:block">
+                                            Complete la información del hallazgo
+                                        </p>
+                                    </div>
                                 </div>
-                                <div>
-                                    <h2 className="text-lg font-bold text-slate-800">
-                                        {selectedCard.id ? `Tarjeta #${String(selectedCard.cardNumber).padStart(3, '0')}` : 'Nueva Tarjeta 5S'}
-                                    </h2>
-                                    <p className="text-xs text-slate-500 hidden sm:block">
-                                        Complete la información del hallazgo
-                                    </p>
-                                </div>
-                            </div>
-                            {/* Action Icons */}
-                            <div className="flex items-center gap-2">
-                                {/* Delete Button */}
-                                {selectedCard.id && (
-                                    <button
-                                        onClick={handleDeleteCard}
-                                        className="p-2 text-red-500 hover:bg-red-50 rounded-full transition-colors"
-                                        title="Eliminar"
-                                    >
-                                        <Trash2 size={22} />
-                                    </button>
+
+                                {/* Company Selector (Admin) */}
+                                {(companies.length > 0) && (
+                                    <div className="hidden sm:block min-w-[200px] ml-4">
+                                        <div className="relative">
+                                            <Building size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                                            <select
+                                                className="w-full py-1 pl-8 pr-2 text-sm font-medium rounded-lg border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-brand-500 outline-none cursor-pointer hover:bg-white transition-colors text-slate-700"
+                                                value={selectedCard.company_id || 'all'}
+                                                onChange={(e) => setSelectedCard({ ...selectedCard, company_id: e.target.value === 'all' ? null : e.target.value })}
+                                            >
+                                                <option value="all">Todas / Sin Asignar</option>
+                                                {companies.map(c => (
+                                                    <option key={c.id} value={c.id}>{c.name}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    </div>
                                 )}
-                                {/* Save Button */}
-                                <button
-                                    onClick={handleSaveCard}
-                                    className="p-2 text-brand-600 hover:bg-brand-50 rounded-full transition-colors"
-                                    title="Guardar"
-                                >
-                                    <Save size={22} />
-                                </button>
-                                {/* Close Button */}
-                                <button onClick={handleCloseModal} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors">
-                                    <X size={22} />
-                                </button>
-                            </div>
-                        </div>
 
-                        {/* Modal Content - Form Grid */}
-                        <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
-
-                            <datalist id="person-suggestions">
-                                {personSuggestions.map((name, index) => (
-                                    <option key={index} value={name} />
-                                ))}
-                            </datalist>
-
-                            <div className="space-y-2">
-                                <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                                    <Calendar size={16} className="text-slate-400" /> Fecha Tarjeta
-                                </label>
-                                <input
-                                    type="date"
-                                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none transition-all shadow-sm"
-                                    value={selectedCard.date || ''}
-                                    onChange={e => updateField('date', e.target.value)}
-                                />
-                            </div>
-
-                            <div className="space-y-2">
-                                <label className="text-sm font-bold text-black flex items-center gap-2">
-                                    <MapPin size={16} className="text-slate-600" /> Ubicación
-                                </label>
-                                <input
-                                    type="text"
-                                    className="w-full p-3 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none transition-all font-medium text-black placeholder-slate-500 shadow-sm"
-                                    value={selectedCard.location || ''}
-                                    onChange={e => updateField('location', e.target.value)}
-                                    placeholder="Ej: Pasillo 4, Línea 2"
-                                />
-                            </div>
-
-                            <div className="space-y-2">
-                                <label className="text-sm font-bold text-black flex items-center gap-2">
-                                    <FileText size={16} className="text-slate-600" /> Artículo / Equipo
-                                </label>
-                                <input
-                                    type="text"
-                                    className="w-full p-3 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none transition-all font-medium text-black placeholder-slate-500 shadow-sm"
-                                    value={selectedCard.article || ''}
-                                    onChange={e => updateField('article', e.target.value)}
-                                    placeholder="Ej: Estantería B, Motor 3"
-                                />
-                            </div>
-
-                            <div className="space-y-2">
-                                <label className="text-sm font-bold text-black flex items-center gap-2">
-                                    <User size={16} className="text-slate-600" /> Reportado Por
-                                </label>
-                                <input
-                                    type="text"
-                                    className="w-full p-3 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none transition-all font-medium text-black placeholder-slate-500 shadow-sm"
-                                    value={selectedCard.reporter || ''}
-                                    onChange={e => updateField('reporter', e.target.value)}
-                                    list="person-suggestions"
-                                    placeholder="Escribe o selecciona..."
-                                />
-                            </div>
-
-                            <div className="md:col-span-2 space-y-2">
-                                <label className="text-sm font-bold text-black flex items-center gap-2">
-                                    <AlertCircle size={16} className="text-amber-500" /> Razón de Tarjeta (Hallazgo)
-                                </label>
-                                <textarea
-                                    className="w-full p-4 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none transition-all resize-none shadow-sm font-medium text-black placeholder-slate-500"
-                                    rows="3"
-                                    value={selectedCard.reason || ''}
-                                    onChange={e => updateField('reason', e.target.value)}
-                                    placeholder="Describe detalladamente la anomalía detectada..."
-                                ></textarea>
-                            </div>
-
-                            <div className="md:col-span-2 space-y-2">
-                                <label className="text-sm font-bold text-black flex items-center gap-2">
-                                    <CheckCircle size={16} className="text-emerald-600" /> Acción Propuesta
-                                </label>
-                                <textarea
-                                    className="w-full p-4 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none transition-all resize-none shadow-sm font-medium text-black placeholder-slate-500"
-                                    rows="2"
-                                    value={selectedCard.proposedAction || ''}
-                                    onChange={e => updateField('proposedAction', e.target.value)}
-                                    placeholder="Describe la acción correctiva sugerida..."
-                                ></textarea>
-                            </div>
-
-                            <hr className="md:col-span-2 border-slate-100 my-2" />
-
-                            <div className="space-y-2">
-                                <label className="text-sm font-bold text-black flex items-center gap-2">
-                                    <User size={16} className="text-slate-600" /> Responsable Asignado
-                                </label>
-                                <select
-                                    className="w-full p-3 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none transition-all shadow-sm text-black font-medium"
-                                    value={selectedCard.responsible || ''}
-                                    onChange={e => updateField('responsible', e.target.value)}
-                                >
-                                    <option value="" disabled>Selecciona Responsable</option>
-                                    {companyUsers && companyUsers.length > 0 ? (
-                                        companyUsers.map(u => (
-                                            <option key={u.id} value={u.name}>{u.name}</option>
-                                        ))
-                                    ) : (
-                                        <>
-                                            {selectedCard.responsible && <option value={selectedCard.responsible}>{selectedCard.responsible}</option>}
-                                            <option value="" disabled>No hay usuarios disponibles</option>
-                                        </>
-
+                                {/* Action Icons */}
+                                <div className="flex items-center gap-2">
+                                    {/* Delete Button */}
+                                    {selectedCard.id && (
+                                        <button
+                                            onClick={handleDeleteCard}
+                                            className="p-2 text-red-500 hover:bg-red-50 rounded-full transition-colors"
+                                            title="Eliminar"
+                                        >
+                                            <Trash2 size={22} />
+                                        </button>
                                     )}
-                                </select>
+                                    {/* Save Button */}
+                                    <button
+                                        onClick={handleSaveCard}
+                                        className="p-2 text-brand-600 hover:bg-brand-50 rounded-full transition-colors"
+                                        title="Guardar"
+                                    >
+                                        <Save size={22} />
+                                    </button>
+                                    {/* Close Button */}
+                                    <button onClick={handleCloseModal} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors">
+                                        <X size={22} />
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Modal Content - Form Grid */}
+                            <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
+
+                                <datalist id="person-suggestions">
+                                    {personSuggestions.map((name, index) => (
+                                        <option key={index} value={name} />
+                                    ))}
+                                </datalist>
+
+                                <div className="space-y-2">
+                                    <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                                        <Calendar size={16} className="text-slate-400" /> Fecha Tarjeta
+                                    </label>
+                                    <input
+                                        type="date"
+                                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none transition-all shadow-sm"
+                                        value={selectedCard.date || ''}
+                                        onChange={e => updateField('date', e.target.value)}
+                                    />
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="text-sm font-bold text-black flex items-center gap-2">
+                                        <MapPin size={16} className="text-slate-600" /> Ubicación
+                                    </label>
+                                    <input
+                                        type="text"
+                                        className="w-full p-3 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none transition-all font-medium text-black placeholder-slate-500 shadow-sm"
+                                        value={selectedCard.location || ''}
+                                        onChange={e => updateField('location', e.target.value)}
+                                        placeholder="Ej: Pasillo 4, Línea 2"
+                                    />
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="text-sm font-bold text-black flex items-center gap-2">
+                                        <FileText size={16} className="text-slate-600" /> Artículo / Equipo
+                                    </label>
+                                    <input
+                                        type="text"
+                                        className="w-full p-3 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none transition-all font-medium text-black placeholder-slate-500 shadow-sm"
+                                        value={selectedCard.article || ''}
+                                        onChange={e => updateField('article', e.target.value)}
+                                        placeholder="Ej: Estantería B, Motor 3"
+                                    />
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="text-sm font-bold text-black flex items-center gap-2">
+                                        <User size={16} className="text-slate-600" /> Reportado Por
+                                    </label>
+                                    <input
+                                        type="text"
+                                        className="w-full p-3 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none transition-all font-medium text-black placeholder-slate-500 shadow-sm"
+                                        value={selectedCard.reporter || ''}
+                                        onChange={e => updateField('reporter', e.target.value)}
+                                        list="person-suggestions"
+                                        placeholder="Escribe o selecciona..."
+                                    />
+                                </div>
+
+                                <div className="md:col-span-2 space-y-2">
+                                    <label className="text-sm font-bold text-black flex items-center gap-2">
+                                        <AlertCircle size={16} className="text-amber-500" /> Razón de Tarjeta (Hallazgo)
+                                    </label>
+                                    <textarea
+                                        className="w-full p-4 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none transition-all resize-none shadow-sm font-medium text-black placeholder-slate-500"
+                                        rows="3"
+                                        value={selectedCard.reason || ''}
+                                        onChange={e => updateField('reason', e.target.value)}
+                                        placeholder="Describe detalladamente la anomalía detectada..."
+                                    ></textarea>
+                                </div>
+
+                                <div className="md:col-span-2 space-y-2">
+                                    <label className="text-sm font-bold text-black flex items-center gap-2">
+                                        <CheckCircle size={16} className="text-emerald-600" /> Acción Propuesta
+                                    </label>
+                                    <textarea
+                                        className="w-full p-4 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none transition-all resize-none shadow-sm font-medium text-black placeholder-slate-500"
+                                        rows="2"
+                                        value={selectedCard.proposedAction || ''}
+                                        onChange={e => updateField('proposedAction', e.target.value)}
+                                        placeholder="Describe la acción correctiva sugerida..."
+                                    ></textarea>
+                                </div>
+
+                                <hr className="md:col-span-2 border-slate-100 my-2" />
+
+                                <div className="space-y-2">
+                                    <label className="text-sm font-bold text-black flex items-center gap-2">
+                                        <User size={16} className="text-slate-600" /> Responsable Asignado
+                                    </label>
+                                    <select
+                                        className="w-full p-3 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none transition-all shadow-sm text-black font-medium"
+                                        value={selectedCard.responsible || ''}
+                                        onChange={e => updateField('responsible', e.target.value)}
+                                    >
+                                        <option value="" disabled>Selecciona Responsable</option>
+                                        {companyUsers && companyUsers.length > 0 ? (
+                                            companyUsers.map(u => (
+                                                <option key={u.id} value={u.name}>{u.name}</option>
+                                            ))
+                                        ) : (
+                                            <>
+                                                {selectedCard.responsible && <option value={selectedCard.responsible}>{selectedCard.responsible}</option>}
+                                                <option value="" disabled>No hay usuarios disponibles</option>
+                                            </>
+
+                                        )}
+                                    </select>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="text-sm font-bold text-black flex items-center gap-2">
+                                        <Activity size={16} className="text-slate-600" /> Estado
+                                    </label>
+                                    <select
+                                        className="w-full p-3 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none transition-all font-medium shadow-sm text-black cursor-pointer"
+                                        value={selectedCard.status || 'Pendiente'}
+                                        onChange={e => {
+                                            const val = e.target.value;
+                                            let color = '#ef4444';
+                                            if (val === 'En Proceso') color = '#f59e0b';
+                                            if (val === 'Cerrado') color = '#10b981';
+                                            setSelectedCard(prev => ({ ...prev, status: val, statusColor: color }));
+                                        }}
+                                    >
+                                        <option value="Pendiente">Pendiente</option>
+                                        <option value="En Proceso">En Proceso</option>
+                                        <option value="Cerrado">Cerrado</option>
+                                    </select>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="text-sm font-bold text-black flex items-center gap-2">
+                                        <Clock size={16} className="text-slate-600" /> Fecha Propuesta
+                                    </label>
+                                    <input
+                                        type="date"
+                                        className="w-full p-3 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none transition-all shadow-sm text-black font-medium"
+                                        value={selectedCard.targetDate || ''}
+                                        onChange={e => updateField('targetDate', e.target.value)}
+                                    />
+                                </div>
+
                             </div>
 
                             <div className="space-y-2">
-                                <label className="text-sm font-bold text-black flex items-center gap-2">
-                                    <Activity size={16} className="text-slate-600" /> Estado
-                                </label>
-                                <select
-                                    className="w-full p-3 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none transition-all font-medium shadow-sm text-black cursor-pointer"
-                                    value={selectedCard.status || 'Pendiente'}
-                                    onChange={e => {
-                                        const val = e.target.value;
-                                        let color = '#ef4444';
-                                        if (val === 'En Proceso') color = '#f59e0b';
-                                        if (val === 'Cerrado') color = '#10b981';
-                                        setSelectedCard(prev => ({ ...prev, status: val, statusColor: color }));
-                                    }}
-                                >
-                                    <option value="Pendiente">Pendiente</option>
-                                    <option value="En Proceso">En Proceso</option>
-                                    <option value="Cerrado">Cerrado</option>
-                                </select>
-                            </div>
-
-                            <div className="space-y-2">
-                                <label className="text-sm font-bold text-black flex items-center gap-2">
-                                    <Clock size={16} className="text-slate-600" /> Fecha Propuesta
+                                <label className={`text-sm font-bold flex items-center gap-2 ${selectedCard.status === 'Cerrado' ? 'text-emerald-700' : 'text-slate-500'}`}>
+                                    <CheckCircle size={16} /> Fecha Solución
                                 </label>
                                 <input
                                     type="date"
-                                    className="w-full p-3 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none transition-all shadow-sm text-black font-medium"
-                                    value={selectedCard.targetDate || ''}
-                                    onChange={e => updateField('targetDate', e.target.value)}
+                                    className="w-full p-3 bg-emerald-50 border border-emerald-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none transition-all disabled:opacity-50 disabled:bg-slate-100 disabled:border-slate-300 disabled:cursor-not-allowed shadow-sm text-black font-medium"
+                                    value={selectedCard.solutionDate || ''}
+                                    onChange={e => updateField('solutionDate', e.target.value)}
+                                    disabled={selectedCard.status !== 'Cerrado'}
                                 />
                             </div>
 
-                        </div>
-
-                        <div className="space-y-2">
-                            <label className={`text-sm font-bold flex items-center gap-2 ${selectedCard.status === 'Cerrado' ? 'text-emerald-700' : 'text-slate-500'}`}>
-                                <CheckCircle size={16} /> Fecha Solución
-                            </label>
-                            <input
-                                type="date"
-                                className="w-full p-3 bg-emerald-50 border border-emerald-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none transition-all disabled:opacity-50 disabled:bg-slate-100 disabled:border-slate-300 disabled:cursor-not-allowed shadow-sm text-black font-medium"
-                                value={selectedCard.solutionDate || ''}
-                                onChange={e => updateField('solutionDate', e.target.value)}
-                                disabled={selectedCard.status !== 'Cerrado'}
-                            />
-                        </div>
-
-                        {/* Sección de Imágenes */}
-                        <div className="md:col-span-2 mt-4 bg-slate-50 p-6 rounded-xl border border-slate-100">
-                            <label className="block text-sm font-bold text-slate-700 mb-4 flex items-center gap-2">
-                                <Camera size={18} className="text-brand-500" /> Evidencia Fotográfica
-                            </label>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                                {/* Antes */}
-                                <div className="space-y-2">
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">1. El Problema (Antes)</span>
-                                        {selectedCard.imageBefore && <span className="text-xs text-emerald-600 font-bold flex items-center gap-1"><CheckCircle size={12} /> Cargada</span>}
-                                    </div>
-                                    <div className="h-48 bg-white rounded-xl border-2 border-dashed border-slate-300 overflow-hidden hover:border-brand-400 transition-colors group relative">
-                                        {/* Mobile Camera First approach */}
-                                        <div className="block md:hidden h-full">
-                                            <CameraCapture
-                                                currentImage={selectedCard.imageBefore}
-                                                onCapture={(file, url) => handleFileSelect('imageBefore', file, url)}
-                                                label="Tomar Foto (Antes)"
-                                            />
+                            {/* Sección de Imágenes */}
+                            <div className="md:col-span-2 mt-4 bg-slate-50 p-6 rounded-xl border border-slate-100">
+                                <label className="block text-sm font-bold text-slate-700 mb-4 flex items-center gap-2">
+                                    <Camera size={18} className="text-brand-500" /> Evidencia Fotográfica
+                                </label>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                                    {/* Antes */}
+                                    <div className="space-y-2">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">1. El Problema (Antes)</span>
+                                            {selectedCard.imageBefore && <span className="text-xs text-emerald-600 font-bold flex items-center gap-1"><CheckCircle size={12} /> Cargada</span>}
                                         </div>
-                                        {/* Desktop existing component */}
-                                        <div className="hidden md:block h-full">
-                                            <ImageUpload
-                                                currentImage={selectedCard.imageBefore}
-                                                onFileSelect={(file, url) => handleFileSelect('imageBefore', file, url)}
-                                                placeholderText="Subir foto del hallazgo"
-                                            />
+                                        <div className="h-48 bg-white rounded-xl border-2 border-dashed border-slate-300 overflow-hidden hover:border-brand-400 transition-colors group relative">
+                                            {/* Mobile Camera First approach */}
+                                            <div className="block md:hidden h-full">
+                                                <CameraCapture
+                                                    currentImage={selectedCard.imageBefore}
+                                                    onCapture={(file, url) => handleFileSelect('imageBefore', file, url)}
+                                                    label="Tomar Foto (Antes)"
+                                                />
+                                            </div>
+                                            {/* Desktop existing component */}
+                                            <div className="hidden md:block h-full">
+                                                <ImageUpload
+                                                    currentImage={selectedCard.imageBefore}
+                                                    onFileSelect={(file, url) => handleFileSelect('imageBefore', file, url)}
+                                                    placeholderText="Subir foto del hallazgo"
+                                                />
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
 
-                                {/* Después */}
-                                <div className="space-y-2">
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">2. La Solución (Después)</span>
-                                        {selectedCard.imageAfter && <span className="text-xs text-emerald-600 font-bold flex items-center gap-1"><CheckCircle size={12} /> Cargada</span>}
-                                    </div>
-                                    <div className="h-48 bg-white rounded-xl border-2 border-dashed border-slate-300 overflow-hidden hover:border-brand-400 transition-colors group relative">
-                                        {/* Mobile Camera First approach */}
-                                        <div className="block md:hidden h-full">
-                                            <CameraCapture
-                                                currentImage={selectedCard.imageAfter}
-                                                onCapture={(file, url) => handleFileSelect('imageAfter', file, url)}
-                                                label="Tomar Foto (Después)"
-                                            />
+                                    {/* Después */}
+                                    <div className="space-y-2">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">2. La Solución (Después)</span>
+                                            {selectedCard.imageAfter && <span className="text-xs text-emerald-600 font-bold flex items-center gap-1"><CheckCircle size={12} /> Cargada</span>}
                                         </div>
-                                        {/* Desktop existing component */}
-                                        <div className="hidden md:block h-full">
-                                            <ImageUpload
-                                                currentImage={selectedCard.imageAfter}
-                                                onFileSelect={(file, url) => handleFileSelect('imageAfter', file, url)}
-                                                placeholderText="Subir foto de la mejora"
-                                            />
+                                        <div className="h-48 bg-white rounded-xl border-2 border-dashed border-slate-300 overflow-hidden hover:border-brand-400 transition-colors group relative">
+                                            {/* Mobile Camera First approach */}
+                                            <div className="block md:hidden h-full">
+                                                <CameraCapture
+                                                    currentImage={selectedCard.imageAfter}
+                                                    onCapture={(file, url) => handleFileSelect('imageAfter', file, url)}
+                                                    label="Tomar Foto (Después)"
+                                                />
+                                            </div>
+                                            {/* Desktop existing component */}
+                                            <div className="hidden md:block h-full">
+                                                <ImageUpload
+                                                    currentImage={selectedCard.imageAfter}
+                                                    onFileSelect={(file, url) => handleFileSelect('imageAfter', file, url)}
+                                                    placeholderText="Subir foto de la mejora"
+                                                />
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
                             </div>
+
                         </div>
-
                     </div>
-                </div>
-            )}
+                )
+            }
 
-            {!selectedCard && (
-                <MobileFab icon={Camera} onClick={handleNewCard} label="Nueva Tarjeta 5S" />
-            )}
+            {
+                !selectedCard && (
+                    <MobileFab icon={Camera} onClick={handleNewCard} label="Nueva Tarjeta 5S" />
+                )
+            }
 
-            {showHistory && (
-                <AuditHistoryModal onClose={() => setShowHistory(false)} />
-            )}
+            {
+                showHistory && (
+                    <AuditHistoryModal onClose={() => setShowHistory(false)} />
+                )
+            }
 
-        </div>
+        </div >
     );
 };
 
@@ -1163,12 +1346,6 @@ const AuditHistoryModal = ({ onClose }) => {
 };
 
 // Start of dummy Save icon component for fix
-const Save = ({ size, className }) => (
-    <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-        <polyline points="17 21 17 13 7 13 7 21"></polyline>
-        <polyline points="7 3 7 8 15 8"></polyline>
-    </svg>
-);
+
 
 export default FiveSPage;

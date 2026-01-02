@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { DataProvider } from './context/DataContext';
 import ProtectedRoute from './components/ProtectedRoute';
+import RecoveryRedirect from './components/RecoveryRedirect';
 import './index.css';
 
 // Layouts
@@ -31,10 +32,13 @@ const OfflineFiveS = lazy(() => import('./pages/OfflineFiveS'));
 const OfflineAudit = lazy(() => import('./pages/OfflineAudit'));
 
 const LoadingFallback = () => (
-  <div className="flex h-screen w-full items-center justify-center bg-slate-50">
-    <div className="flex flex-col items-center gap-4">
-      <div className="h-10 w-10 animate-spin rounded-full border-4 border-indigo-200 border-t-indigo-600"></div>
-      <p className="text-sm font-medium text-slate-500 animate-pulse">Cargando...</p>
+  <div className="flex h-screen w-full items-center justify-center bg-[#0B1F3F]">
+    <div className="flex flex-col items-center gap-6">
+      <img src="/be-lean-logo-white.png" alt="Be Lean" className="h-24 w-auto drop-shadow-lg animate-pulse" />
+      <div className="flex flex-col items-center gap-4">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-500 border-t-transparent"></div>
+        <p className="text-sm font-medium text-slate-300">Cargando Sistema...</p>
+      </div>
     </div>
   </div>
 );
@@ -44,6 +48,7 @@ function App() {
     <AuthProvider>
       <DataProvider>
         <BrowserRouter>
+          <RecoveryRedirect />
           <Suspense fallback={<LoadingFallback />}>
             <Routes>
               <Route path="/login" element={<LoginPage />} />

@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../context/AuthContext';
 import HeaderWithFilter from '../components/HeaderWithFilter';
-import { Plus, Search, X, Save, FileText, BarChart2, GitBranch, Target, Layout, Calendar, User, Trash2, Image as ImageIcon } from 'lucide-react';
+import { Plus, Search, X, Save, FileText, BarChart2, GitBranch, Target, Layout, Calendar, User, Trash2, Image as ImageIcon, Building } from 'lucide-react';
 
 // Import A3 Components
 import A3Ishikawa from '../components/a3/A3Ishikawa';
@@ -42,6 +42,33 @@ const A3Page = () => {
     const [selectedA3, setSelectedA3] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [activeTab, setActiveTab] = useState('definition'); // definition, analysis, plan
+    const [companies, setCompanies] = useState([]);
+
+    // Fetch Companies for Global Admin
+    useEffect(() => {
+        if (user?.isGlobalAdmin) {
+            supabase.from('companies').select('id, name').then(({ data }) => {
+                if (data) setCompanies(data);
+            });
+        }
+    }, [user]);
+
+    const handleDelete = async () => {
+        if (!selectedA3?.id) return;
+        if (!window.confirm('¿Estás seguro de que deseas eliminar este proyecto A3? Esta acción es irreversible.')) return;
+
+        try {
+            const { error } = await supabase.from('a3_projects').delete().eq('id', selectedA3.id);
+            if (error) throw error;
+
+            setA3Projects(prev => prev.filter(p => p.id !== selectedA3.id));
+            setSelectedA3(null);
+            alert('Proyecto eliminado correctamente.');
+        } catch (error) {
+            console.error('Error delete:', error);
+            alert('Error al eliminar: ' + error.message);
+        }
+    };
 
     // Load data from Supabase
     const [a3Projects, setA3Projects] = useState([]);
@@ -115,11 +142,18 @@ const A3Page = () => {
     // Filtrado Global
     const visibleProjects = useMemo(() => {
         if (!user) return [];
-        const isSuperAdmin = user.role === 'admin' || user.email === 'ariel.mellag@gmail.com';
+        // STRICT PERMISSION CHECK: usage of 'isGlobalAdmin' from AuthContext
+        const isSuperAdmin = user.isGlobalAdmin;
         const targetCompanyId = isSuperAdmin ? globalFilterCompanyId : user.companyId;
 
-        if (targetCompanyId === 'all') return a3Projects;
-        return a3Projects.filter(p => p.companyId === targetCompanyId || p.responsible === user.name || !p.companyId);
+        if (targetCompanyId === 'all') {
+            // Only Super Admins can see 'all'
+            return isSuperAdmin ? a3Projects : [];
+        }
+
+        // Strict filtering: User must match company OR be Global Admin matching 'all'
+        // Legacy support: (!p.companyId && isSuperAdmin)
+        return a3Projects.filter(p => p.companyId === targetCompanyId || (!p.companyId && isSuperAdmin));
     }, [a3Projects, user, globalFilterCompanyId]);
 
     const filteredProjects = useMemo(() => {
@@ -154,22 +188,31 @@ const A3Page = () => {
         setActiveTab('definition');
     };
 
+    const [isSaving, setIsSaving] = useState(false);
+
     const handleSave = async () => {
         if (!selectedA3.title) {
             alert('El título es obligatorio');
             return;
         }
 
-        // AUTO-ASSIGN COMPANY based on Responsible
-        let resolvedCompanyId = selectedA3.companyId;
+        setIsSaving(true);
 
+        // AUTO-ASSIGN COMPANY based on Responsible
+        let resolvedCompanyId = selectedA3.companyId || selectedA3.company_id;
+
+        // If explicitly set, we primarily use it. 
+        // Logic: Only override if the responsible user BELONGS to a different company.
+        // If responsible is "Global" (company_id null), we KEEP the manual selection.
         if (companyUsers && selectedA3.responsible) {
             const responsibleUser = companyUsers.find(u => u.name === selectedA3.responsible);
+            // Only force override if the user has a specific company assigned
             if (responsibleUser && responsibleUser.company_id) {
                 resolvedCompanyId = responsibleUser.company_id;
             }
         }
 
+        // Fallback only if still null
         if (!resolvedCompanyId) {
             resolvedCompanyId = user.companyId || (globalFilterCompanyId !== 'all' ? globalFilterCompanyId : null);
         }
@@ -221,7 +264,9 @@ const A3Page = () => {
             setSelectedA3(null);
         } catch (error) {
             console.error("Error saving A3:", error);
-            alert("Error al guardar el proyecto A3");
+            alert("Error al guardar el proyecto A3: " + (error.message || "Error desconocido"));
+        } finally {
+            setIsSaving(false);
         }
     };
 
@@ -347,7 +392,7 @@ const A3Page = () => {
                     <input
                         type="text"
                         placeholder="Buscar proyectos por título o responsable..."
-                        className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-all text-sm outline-none"
+                        className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-all text-sm text-slate-900 outline-none"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
@@ -363,7 +408,13 @@ const A3Page = () => {
                     <div
                         key={project.id}
                         className="group bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer flex flex-col h-full relative"
-                        onClick={() => { setSelectedA3(project); setActiveTab('definition'); }}
+                        onClick={() => {
+                            setSelectedA3({
+                                ...project,
+                                companyId: project.companyId || project.company_id // Normalize for form
+                            });
+                            setActiveTab('definition');
+                        }}
                     >
                         {/* Status Strip */}
                         <div className={`absolute top-0 left-0 bottom-0 w-1 transition-colors ${project.status === 'Cerrado' ? 'bg-emerald-500' : (project.status === 'En Proceso' ? 'bg-amber-500' : 'bg-blue-500')}`}></div>
@@ -442,6 +493,26 @@ const A3Page = () => {
                                         placeholder="Escribe el Título del Proyecto..."
                                     />
                                     <span className="text-slate-200 text-2xl font-light hidden sm:inline">|</span>
+
+                                    {/* Company Selector (Admin) */}
+                                    {(companies.length > 0) && (
+                                        <div className="hidden sm:block min-w-[200px]">
+                                            <div className="relative">
+                                                <Building size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                                                <select
+                                                    className="w-full py-1 pl-8 pr-2 text-sm font-medium rounded-lg border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-brand-500 outline-none cursor-pointer hover:bg-white transition-colors text-slate-700"
+                                                    value={selectedA3.companyId || 'all'}
+                                                    onChange={(e) => setSelectedA3({ ...selectedA3, companyId: e.target.value === 'all' ? null : e.target.value })}
+                                                >
+                                                    <option value="all">Todas / Sin Asignar</option>
+                                                    {companies.map(c => (
+                                                        <option key={c.id} value={c.id}>{c.name}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </div>
+                                    )}
+
                                     <div className="hidden sm:block min-w-[140px]">
                                         <select
                                             className={`w-full py-1 pl-2 pr-8 text-sm font-bold rounded-lg border-none focus:ring-2 cursor-pointer ${selectedA3.status === 'Cerrado' ? 'bg-emerald-50 text-emerald-700' :
@@ -461,16 +532,29 @@ const A3Page = () => {
                             <div className="flex items-center gap-3">
                                 <button
                                     onClick={handleSave}
-                                    className="hidden sm:flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-lg font-medium transition-all shadow-sm active:scale-95"
+                                    disabled={isSaving}
+                                    className="hidden sm:flex items-center gap-2 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg font-medium transition-all shadow-sm active:scale-95"
                                 >
-                                    <Save size={18} /> <span>Guardar</span>
+                                    <Save size={18} /> <span>{isSaving ? 'Guardando...' : 'Guardar'}</span>
                                 </button>
                                 <button
                                     onClick={handleSave}
-                                    className="sm:hidden p-2 bg-brand-600 text-white rounded-lg"
+                                    disabled={isSaving}
+                                    className="sm:hidden p-2 bg-brand-600 disabled:opacity-50 text-white rounded-lg"
                                 >
                                     <Save size={20} />
                                 </button>
+
+                                {selectedA3.id && (
+                                    <button
+                                        onClick={handleDelete}
+                                        className="p-2 text-red-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                        title="Eliminar Proyecto"
+                                    >
+                                        <Trash2 size={24} />
+                                    </button>
+                                )}
+
                                 <button
                                     onClick={() => setSelectedA3(null)}
                                     className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"

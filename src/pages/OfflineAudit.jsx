@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Save, Plus, Trash2, CheckCircle, WifiOff, ChevronDown, ChevronUp } from 'lucide-react';
 import { offlineService } from '../services/offlineService';
@@ -37,6 +37,7 @@ const OfflineAudit = () => {
     const [saved, setSaved] = useState(false);
     const [expandedSection, setExpandedSection] = useState('S1');
 
+
     // Initialize Form Data
     const [auditData, setAuditData] = useState(() => {
         const entries = {};
@@ -52,7 +53,8 @@ const OfflineAudit = () => {
             area: '',
             auditor: '',
             date: new Date().toISOString().split('T')[0],
-            entries: entries
+            entries: entries,
+            companyId: ''
         };
     });
 
@@ -88,12 +90,19 @@ const OfflineAudit = () => {
 
     const handleSave = async (e) => {
         e.preventDefault();
+
+        if (!auditData.area || !auditData.auditor) {
+            alert("Área y Auditor son obligatorios.");
+            return;
+        }
+
         setLoading(true);
         try {
             const totalScore = calculateScore();
             const payload = {
                 ...auditData,
-                total_score: totalScore
+                total_score: totalScore,
+                company_id: auditData.companyId
             };
 
             await offlineService.saveAudit(payload);
@@ -158,6 +167,8 @@ const OfflineAudit = () => {
                     {/* General Info */}
                     <div className="bg-white p-6 rounded-xl shadow-sm space-y-4">
                         <h2 className="font-bold text-slate-900 mb-4">Información General</h2>
+
+
 
                         <div>
                             <label className="block text-sm font-bold text-slate-900 mb-1">Título de Referencia</label>

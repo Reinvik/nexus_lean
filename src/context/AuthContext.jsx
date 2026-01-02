@@ -1,7 +1,17 @@
 import { createContext, useState, useContext, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
+import { offlineService } from '../services/offlineService';
 
-const AuthContext = createContext();
+const AuthContext = createContext({
+    user: null,
+    loading: true,
+    login: async () => ({ success: false, message: 'Auth not initialized' }),
+    logout: async () => { },
+    register: async () => ({ success: false, message: 'Auth not initialized' }),
+    companies: [],
+    companyUsers: [],
+    globalFilterCompanyId: 'all'
+});
 
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
@@ -31,7 +41,11 @@ export const AuthProvider = ({ children }) => {
                 return;
             }
             console.log("AuthContext: Companies loaded:", data?.length, data);
-            if (data) setCompanies(data);
+            if (data) {
+                setCompanies(data);
+                // Cache for offline use
+                offlineService.saveCompanies(data);
+            }
         } catch (err) {
             console.error("AuthContext: Unexpected error fetching companies:", err);
         }
@@ -129,6 +143,16 @@ export const AuthProvider = ({ children }) => {
     useEffect(() => {
         let mounted = true;
 
+        // Manual check for recovery hash (Robustness fix)
+        // If we see type=recovery in the URL but aren't on result page, redirect immediately.
+        if (window.location.hash && window.location.hash.includes('type=recovery')) {
+            if (!window.location.pathname.includes('/reset-password')) {
+                console.log("AuthContext: Detected recovery hash on wrong page. Redirecting to /reset-password...");
+                window.location.href = '/reset-password' + window.location.hash;
+                return;
+            }
+        }
+
         // Check active session
         const checkUser = async () => {
             try {
@@ -146,7 +170,7 @@ export const AuthProvider = ({ children }) => {
                 ]);
 
                 const { data: { session }, error } = sessionResult;
-                console.log(`AuthContext: Session checked in ${Date.now() - start}ms`);
+                console.log(`AuthContext: Session checked in ${Date.now() - start}ms`, session ? 'Session found' : 'No session');
 
                 if (error) {
                     console.error("AuthContext: Error getting session:", error);
@@ -175,7 +199,7 @@ export const AuthProvider = ({ children }) => {
                 console.warn("AuthContext: Forced loading to false due to timeout.");
                 setLoading(false);
             }
-        }, 5000); // Reduced to 5s
+        }, 5000); // Fail-safe reduced to 5s
 
         const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
             console.log("AuthContext: Auth state change:", event);
@@ -193,6 +217,11 @@ export const AuthProvider = ({ children }) => {
                 } catch (e) {
                     console.error("AuthContext: Error in SIGNED_IN handler:", e);
                 }
+            } else if (event === 'PASSWORD_RECOVERY') {
+                console.log("AuthContext: Password recovery event detected. Redirecting...");
+                // Force redirect to reset password page to ensure user changes password
+                // Using window.location because we are outside Router context
+                window.location.href = '/reset-password';
             } else if (event === 'SIGNED_OUT') {
                 setUser(null);
                 setLoading(false);
@@ -212,9 +241,9 @@ export const AuthProvider = ({ children }) => {
             const domain = email.split('@')[1];
             if (!domain) return null;
 
-            // Short timeout for this fallback lookup (2 seconds)
+            // Extended timeout for domain lookup (10 seconds)
             const timeoutPromise = new Promise((_, reject) =>
-                setTimeout(() => reject(new Error('Domain lookup timed out')), 2000)
+                setTimeout(() => reject(new Error('Domain lookup timed out')), 10000)
             );
 
             const { data } = await Promise.race([
@@ -234,12 +263,12 @@ export const AuthProvider = ({ children }) => {
     };
 
     const fetchProfile = async (authUser) => {
-        // HARDCODE ADMIN OVERRIDE FOR SPECIFIC EMAIL
-        const isOwner = authUser.email?.toLowerCase() === 'ariel.mellag@gmail.com';
+        // HARDCODE ADMIN OVERRIDE FOR SPECIFIC EMAIL OR DOMAIN
+        const isOwner = authUser.email?.toLowerCase() === 'ariel.mellag@gmail.com' || authUser.email?.toLowerCase() === 'equipo@belean.cl' || authUser.email?.toLowerCase().endsWith('@belean.cl');
 
-        // Timeout for the main profile fetch - REDUCED to 5s
+        // Timeout for the main profile fetch - Increased to 10s to avoid premature fallback in local dev
         const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Request timed out')), 5000)
+            setTimeout(() => reject(new Error('Request timed out')), 10000)
         );
 
         let profileData = null;
@@ -311,7 +340,7 @@ export const AuthProvider = ({ children }) => {
                 };
 
                 console.log("AuthContext: Attempting auto-recovery of missing profile...", recoveredProfile);
-                const { error: recoveryError } = await supabase.from('profiles').upsert(recoveredProfile);
+                const { error: recoveryError } = await supabase.from('profiles').upsert(recoveredProfile, { onConflict: 'id', ignoreDuplicates: true });
 
                 if (!recoveryError) {
                     console.log("AuthContext: Profile auto-recovered successfully.");
@@ -436,6 +465,35 @@ export const AuthProvider = ({ children }) => {
         return { success: true, message: 'Se ha enviado un correo de recuperación.' };
     };
 
+    const updateProfileName = async (newName) => {
+        if (!user) return { success: false, message: 'No user logged in' };
+
+        try {
+            // 1. Update profiles table
+            const { error: profileError } = await supabase
+                .from('profiles')
+                .update({ name: newName })
+                .eq('id', user.id);
+
+            if (profileError) throw profileError;
+
+            // 2. Update auth metadata
+            const { error: authError } = await supabase.auth.updateUser({
+                data: { name: newName }
+            });
+
+            if (authError) console.warn("Error updating auth metadata:", authError);
+
+            // 3. Update local state
+            setUser(prev => ({ ...prev, name: newName }));
+
+            return { success: true, message: 'Nombre actualizado correctamente' };
+        } catch (error) {
+            console.error("Error updating name:", error);
+            return { success: false, message: error.message };
+        }
+    };
+
     const updatePassword = async (newPassword) => {
         const { error } = await supabase.auth.updateUser({ password: newPassword });
         if (error) return { success: false, message: error.message };
@@ -470,11 +528,15 @@ export const AuthProvider = ({ children }) => {
         const { error } = await supabase
             .from('companies')
             .insert([{ name, domain }]);
+
         if (!error) {
             // Refresh companies
             const { data } = await supabase.from('companies').select('*');
             if (data) setCompanies(data);
+            return { success: true };
         }
+
+        return { success: false, error };
     };
 
     const removeCompany = async (id) => {
@@ -559,16 +621,27 @@ export const AuthProvider = ({ children }) => {
             companyUsers,
             globalFilterCompanyId,
             setGlobalFilterCompanyId,
-            globalFilterCompanyId,
-            setGlobalFilterCompanyId,
             updateUserStatus,
             toggleAIAccess,
             refreshData,
             repairAdminProfile,
             updatePassword,
-            inviteUser
+            inviteUser,
+            updateProfileName
         }}>
-            {!loading && children}
+            {loading ? (
+                <div className="flex items-center justify-center h-screen bg-[#0B1F3F]">
+                    <div className="flex flex-col items-center gap-6">
+                        <img src="/be-lean-logo-white.png" alt="Be Lean" className="h-24 w-auto drop-shadow-lg animate-pulse" />
+                        <div className="flex flex-col items-center gap-4">
+                            <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-500 border-t-transparent"></div>
+                            <p className="text-sm font-medium text-slate-300">Iniciando Sistema...</p>
+                        </div>
+                    </div>
+                </div>
+            ) : (
+                children
+            )}
         </AuthContext.Provider>
     );
 };

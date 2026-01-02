@@ -1,57 +1,84 @@
-import { useState, useMemo } from 'react';
+import { useMemo, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
+import { supabase } from '../supabaseClient';
 import AIConsultant from '../components/AIConsultant';
 import HeaderWithFilter from '../components/HeaderWithFilter';
 import { Brain } from 'lucide-react';
 
 const ConsultantPage = () => {
     const { user, globalFilterCompanyId, companies } = useAuth();
-    const { fiveSCards, quickWinsData, vsmData, a3Data, loadingFiveS, loadingResponsables } = useData();
 
-    const loading = loadingFiveS || loadingResponsables;
+    // 1. CACHED DATA (Instant Load)
+    const {
+        fiveSCards: ctxFiveS,
+        quickWinsData: ctxQuickWins,
+        vsmData: ctxVSM,
+        a3Data: ctxA3,
+        loadingFiveS,
+        loadingResponsables,
+        fetchFiveSCards,
+        fetchResponsablesData,
+        auditData: ctxAudits,
+        fetchAudits
+    } = useData();
 
-    // Filter Data
-    const filteredData = useMemo(() => {
-        if (!user) return { fiveS: [], quickWins: [], vsms: [], a3: [] };
+    // 2. TRIGGER CONTEXT DATA LOADING
+    useEffect(() => {
+        if (user) {
+            // Ensure context has fresh data
+            fetchFiveSCards('all').catch(console.error);
+            fetchResponsablesData().catch(console.error);
+            fetchAudits().catch(console.error);
+        }
+    }, [user, fetchFiveSCards, fetchResponsablesData, fetchAudits]);
 
-        const isAdmin = user.role === 'admin' || user.email === 'ariel.mellag@gmail.com';
-        const targetCompanyId = isAdmin ? globalFilterCompanyId : user.companyId;
+    const isSyncing = loadingFiveS || loadingResponsables;
 
+    // 3. EFFECTIVE DATA: Filter Context Data
+    const effectiveData = useMemo(() => {
+        // Helper to filter by company logic
         const filterByCompany = (items) => {
             if (!Array.isArray(items)) return [];
+
+            // STRICT PERMISSION CHECK: usage of 'isGlobalAdmin' from AuthContext
+            const isGlobalAdmin = user?.isGlobalAdmin;
+            const targetCompanyId = isGlobalAdmin ? globalFilterCompanyId : user?.companyId;
+
             if (targetCompanyId === 'all') return items;
-            return items.filter(item => item.companyId && item.companyId === targetCompanyId);
+
+            // Loose equality for cross-type matching (string vs number id)
+            return items.filter(item =>
+                (item.companyId && item.companyId == targetCompanyId) ||
+                (item.company_id && item.company_id == targetCompanyId)
+            );
         };
 
-        // Prepare A3 detailed structure (ensure all fields expected by AI are present)
-        const enrichedA3 = (a3Data || []).map(p => ({
+        const enrichedA3 = (ctxA3 || []).map(p => ({
             ...p,
-            background: p.background,
-            currentCondition: p.current_condition || p.currentCondition, // Handle snake_case vs camelCase if mixed
-            goal: p.goal,
+            currentCondition: p.current_condition || p.currentCondition,
             rootCause: p.root_cause || p.rootCause,
-            countermeasures: p.countermeasures,
             ishikawas: p.ishikawas || [],
-            multipleFiveWhys: p.multipleFiveWhys || p.five_whys || [], // Handle both keys
-            followUpData: Array.isArray(p.follow_up_data) ? p.follow_up_data : (p.followUpData || [])
+            multipleFiveWhys: p.multipleFiveWhys || p.five_whys || [],
+            followUpData: p.followUpData || p.follow_up_data || []
         }));
 
         return {
-            fiveS: filterByCompany(fiveSCards),
-            quickWins: filterByCompany(quickWinsData),
-            vsms: filterByCompany(vsmData),
+            fiveS: filterByCompany(ctxFiveS),
+            quickWins: filterByCompany(ctxQuickWins),
+            vsms: filterByCompany(ctxVSM),
             a3: filterByCompany(enrichedA3),
-            auditLogs: [] // Audit logs can be fetched separately if strictly needed, or omitted for speed
+            auditLogs: filterByCompany(ctxAudits)
         };
-    }, [user, globalFilterCompanyId, fiveSCards, quickWinsData, vsmData, a3Data]);
+    }, [user, globalFilterCompanyId, ctxFiveS, ctxQuickWins, ctxVSM, ctxA3, ctxAudits]);
+
 
     const companyName = companies?.find(c => c.id === globalFilterCompanyId)?.name || 'Todas las Empresas';
 
     if (!user) return <div className="flex h-screen items-center justify-center text-slate-400">Cargando...</div>;
 
-    // Permissions Check
-    const hasAIAccess = user.role === 'admin' || user.has_ai_access === true;
+    // Permissions check
+    const hasAIAccess = user.role === 'admin' || user.role === 'superadmin' || user.has_ai_access === true;
 
     if (!hasAIAccess) {
         return (
@@ -68,8 +95,8 @@ const ConsultantPage = () => {
     }
 
     return (
-        <div className="max-w-7xl mx-auto space-y-6 h-[calc(100vh-100px)] flex flex-col">
-            <div className="flex flex-col xl:flex-row justify-between xl:items-end gap-4 shrink-0">
+        <div className="max-w-7xl mx-auto space-y-2 h-[calc(100vh-85px)] flex flex-col">
+            <div className="flex flex-col xl:flex-row justify-between xl:items-end gap-2 shrink-0">
                 <HeaderWithFilter
                     title="Consultor IA"
                     subtitle="Análisis inteligente y asistencia en tiempo real"
@@ -77,19 +104,16 @@ const ConsultantPage = () => {
                 />
             </div>
 
-            <div className="flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                {loading ? (
-                    <div className="h-full flex items-center justify-center">
-                        <div className="w-12 h-12 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin"></div>
-                    </div>
-                ) : (
-                    <AIConsultant
-                        data={filteredData}
-                        companyName={companyName}
-                        apiKey={import.meta.env.VITE_GEMINI_API_KEY}
-                        fullScreen={true}
-                    />
-                )}
+            <div className="flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden relative">
+
+
+                <AIConsultant
+                    data={effectiveData}
+                    companyName={companyName}
+                    apiKey={import.meta.env.VITE_GEMINI_API_KEY}
+                    fullScreen={true}
+                    isSyncing={isSyncing}
+                />
             </div>
         </div>
     );

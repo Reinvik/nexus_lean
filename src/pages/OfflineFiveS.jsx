@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { offlineService } from '../services/offlineService';
 import { ArrowLeft, Save, CheckCircle, WifiOff } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -13,8 +13,11 @@ const OfflineFiveS = () => {
         responsible: '',
         reason: '',
         proposedAction: '',
-        type: 'Clasificar'
+        type: 'Clasificar',
+        companyId: ''
     });
+
+
 
     // File states separate from form data
     const [imageBeforeFile, setImageBeforeFile] = useState(null);
@@ -37,7 +40,8 @@ const OfflineFiveS = () => {
                 responsible: '',
                 reason: '',
                 proposedAction: '',
-                type: 'Clasificar'
+                type: 'Clasificar',
+                companyId: ''
             });
             setImageBeforeFile(null);
             setImageAfterFile(null);
@@ -68,7 +72,7 @@ const OfflineFiveS = () => {
                 solution_date: null,
                 status: 'Pendiente',
                 type: formData.type,
-                company_id: null // Will be assigned upon sync based on responsible or defaulting logic
+                company_id: formData.companyId // Associated from offline selection
             };
 
             await offlineService.saveCard(cardData, imageBeforeFile, imageAfterFile);
@@ -147,6 +151,8 @@ const OfflineFiveS = () => {
                 </div>
 
                 <form onSubmit={handleSave} className="space-y-5">
+
+
 
                     {/* Sección: Qué y Dónde */}
                     <section className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 space-y-4">
