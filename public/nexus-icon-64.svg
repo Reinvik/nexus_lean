@@ -1,0 +1,24 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="primaryGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38BDF8"/>
+      <stop offset="50%" stop-color="#0EA5E9"/>
+      <stop offset="100%" stop-color="#0284C7"/>
+    </linearGradient>
+    <linearGradient id="darkGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0369A1"/>
+      <stop offset="100%" stop-color="#075985"/>
+    </linearGradient>
+    <filter id="shadow">
+      <feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-color="#0369A1" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  <g filter="url(#shadow)">
+    <!-- Left bar -->
+    <path d="M10 8 L21 8 L21 42.5 L10 55 Z" fill="url(#primaryGrad)"/>
+    <!-- Diagonal - connects from left bar -->
+    <path d="M10 8 L21 8 L52 55 L40 55 Z" fill="url(#darkGrad)"/>
+    <!-- Right bar -->
+    <path d="M40 8 L52 20 L52 55 L40 55 Z" fill="url(#primaryGrad)"/>
+  </g>
+</svg>
