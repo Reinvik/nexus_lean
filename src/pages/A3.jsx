@@ -205,7 +205,7 @@ const A3Page = () => {
         // Logic: Only override if the responsible user BELONGS to a different company.
         // If responsible is "Global" (company_id null), we KEEP the manual selection.
         if (companyUsers && selectedA3.responsible) {
-            const responsibleUser = companyUsers.find(u => u.name === selectedA3.responsible);
+            const responsibleUser = companyUsers.find(u => u.full_name === selectedA3.responsible);
             // Only force override if the user has a specific company assigned
             if (responsibleUser && responsibleUser.company_id) {
                 resolvedCompanyId = responsibleUser.company_id;
@@ -696,7 +696,7 @@ const A3Page = () => {
                                                                 <option value="" disabled className="text-slate-500">Seleccionar</option>
                                                                 {companyUsers && companyUsers.length > 0 ? (
                                                                     companyUsers.map(u => (
-                                                                        <option key={u.id} value={u.name} className="text-slate-900">{u.name}</option>
+                                                                        <option key={u.id} value={u.full_name} className="text-slate-900">{u.full_name}</option>
                                                                     ))
                                                                 ) : (
                                                                     <>
