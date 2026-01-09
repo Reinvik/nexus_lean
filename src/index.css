@@ -1,289 +1,195 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 @layer base {
-  :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --radius: 0.5rem;
-  }
-
-  body {
-    @apply bg-slate-50 text-slate-900;
-  }
+    body {
+        @apply bg-slate-900 text-slate-200;
+    }
 }
 
 @layer components {
-  .card {
-    @apply bg-white rounded-xl shadow-sm border border-slate-200 p-6;
-  }
+    .card {
+        @apply bg-white rounded-xl shadow-sm border border-slate-200 p-6;
+    }
 }
 
-/* ============================================
-   CUSTOM ANIMATIONS
-   ============================================ */
-
-/* Fade In Up - Entrada suave desde abajo */
-@keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.animate-fade-in-up {
-  animation: fadeInUp 0.6s ease-out forwards;
-}
-
-/* Fade In - Entrada suave simple */
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
-  }
-}
-
-.animate-fade-in {
-  animation: fadeIn 0.4s ease-out forwards;
-}
-
-/* Slide In Down - Para mensajes desde arriba */
-@keyframes slideInDown {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.animate-slide-in-down {
-  animation: slideInDown 0.3s ease-out forwards;
-}
-
-/* Float - Flotación suave */
-@keyframes float {
-
-  0%,
-  100% {
-    transform: translateY(0px);
-  }
-
-  50% {
-    transform: translateY(-20px);
-  }
-}
-
-.animate-float {
-  animation: float 6s ease-in-out infinite;
-}
-
-/* Blob - Movimiento orgánico */
-@keyframes float-slow {
-  0% {
-    transform: translate(0px, 0px) scale(1);
-  }
-
-  33% {
-    transform: translate(30px, -50px) scale(1.1);
-  }
-
-  66% {
-    transform: translate(-20px, 20px) scale(0.9);
-  }
-
-  100% {
-    transform: translate(0px, 0px) scale(1);
-  }
-}
-
-.animate-blob {
-  animation: float-slow 7s infinite;
-}
-
-/* Animation Delays */
-.animation-delay-2000 {
-  animation-delay: 2s;
-}
-
-.animation-delay-4000 {
-  animation-delay: 4s;
-}
-
-/* Shake - Feedback de error */
-@keyframes shake {
-
-  0%,
-  100% {
-    transform: translateX(0);
-  }
-
-  10%,
-  30%,
-  50%,
-  70%,
-  90% {
-    transform: translateX(-4px);
-  }
-
-  20%,
-  40%,
-  60%,
-  80% {
-    transform: translateX(4px);
-  }
-}
-
-.animate-shake {
-  animation: shake 0.5s cubic-bezier(.36, .07, .19, .97) both;
-}
-
-/* Shine - Efecto de brillo en hover */
-@keyframes shine {
-  100% {
-    left: 125%;
-  }
-}
-
-.animate-shine {
-  animation: shine 1s;
-}
-
-/* Spin fallback */
+/* Fallback utilities in case Tailwind is failing */
 .animate-spin {
-  animation: spin 1s linear infinite;
+    animation: spin 1s linear infinite;
 }
 
 @keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
+    from {
+        transform: rotate(0deg);
+    }
 
-  to {
-    transform: rotate(360deg);
-  }
+    to {
+        transform: rotate(360deg);
+    }
 }
 
-@keyframes bounce-slow {
-
-  0%,
-  100% {
-    transform: translateY(-5%);
-    animation-timing-function: cubic-bezier(0.8, 0, 1, 1);
-  }
-
-  50% {
-    transform: translateY(0);
-    animation-timing-function: cubic-bezier(0, 0, 0.2, 1);
-  }
+.hidden {
+    display: none;
 }
 
-.animate-bounce-slow {
-  animation: bounce-slow 2s infinite;
+/* Custom Animations */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
-.animate-spin-slow {
-  animation: spin 3s linear infinite;
+.animate-fade-in-up {
+    animation: fadeInUp 0.6s ease-out forwards;
 }
 
-/* ============================================
-   GLASS PANEL EFFECT
-   ============================================ */
+@keyframes float {
+    0% {
+        transform: translateY(0px);
+    }
+
+    50% {
+        transform: translateY(-20px);
+    }
+
+    100% {
+        transform: translateY(0px);
+    }
+}
+
+.animate-float {
+    animation: float 6s ease-in-out infinite;
+}
+
+@keyframes float-slow {
+    0% {
+        transform: translate(0px, 0px) scale(1);
+    }
+
+    33% {
+        transform: translate(30px, -50px) scale(1.1);
+    }
+
+    66% {
+        transform: translate(-20px, 20px) scale(0.9);
+    }
+
+    100% {
+        transform: translate(0px, 0px) scale(1);
+    }
+}
+
+.animate-blob {
+    animation: float-slow 7s infinite;
+}
+
+.animation-delay-2000 {
+    animation-delay: 2s;
+}
+
+.animation-delay-4000 {
+    animation-delay: 4s;
+}
 
 .glass-panel {
-  background: rgba(255, 255, 255, 0.03);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
 }
 
-/* ============================================
-   INPUT FOCUS RING
-   ============================================ */
-
 .input-focus-ring {
-  transition: all 0.3s ease;
+    transition: all 0.3s ease;
 }
 
 .input-focus-ring:focus-within {
-  box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.5);
-  border-color: #f97316;
+    box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.5);
+    border-color: #60a5fa;
 }
 
-/* ============================================
-   CUSTOM SCROLLBAR
-   ============================================ */
+@keyframes shine {
+    100% {
+        left: 125%;
+    }
+}
 
-/* Webkit browsers (Chrome, Safari, Edge) */
+.animate-shine {
+    animation: shine 1s;
+}
+
+@keyframes shake {
+
+    0%,
+    100% {
+        transform: translateX(0);
+    }
+
+    10%,
+    30%,
+    50%,
+    70%,
+    90% {
+        transform: translateX(-4px);
+    }
+
+    20%,
+    40%,
+    60%,
+    80% {
+        transform: translateX(4px);
+    }
+}
+
+.animate-shake {
+    animation: shake 0.5s cubic-bezier(.36, .07, .19, .97) both;
+}
+
+/* Custom Scrollbar Styles */
+/* For Webkit browsers (Chrome, Safari, Edge) */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+    width: 6px;
+    height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: transparent;
+    background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(100, 116, 139, 0.3);
-  border-radius: 10px;
-  transition: background 0.3s ease;
+    background: rgba(100, 116, 139, 0.3);
+    border-radius: 10px;
+    transition: background 0.3s ease;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(100, 116, 139, 0.5);
+    background: rgba(100, 116, 139, 0.5);
 }
 
-/* Sidebar specific scrollbar */
+/* Sidebar specific scrollbar - darker theme */
 aside ::-webkit-scrollbar-thumb {
-  background: rgba(71, 85, 105, 0.4);
+    background: rgba(71, 85, 105, 0.4);
 }
 
 aside ::-webkit-scrollbar-thumb:hover {
-  background: rgba(100, 116, 139, 0.6);
+    background: rgba(100, 116, 139, 0.6);
 }
 
-/* Firefox */
+/* For Firefox */
 * {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(100, 116, 139, 0.3) transparent;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(100, 116, 139, 0.3) transparent;
 }
 
 aside {
-  scrollbar-color: rgba(71, 85, 105, 0.4) transparent;
-}
-
-/* Utility */
-.hidden {
-  display: none;
-}
-
-/* Alexa-style Shimmer */
-@keyframes shimmer {
-  0% {
-    background-position: 200% 0;
-  }
-
-  100% {
-    background-position: -200% 0;
-  }
-}
-
-.animate-shimmer {
-  background: linear-gradient(90deg, transparent, rgba(56, 189, 248, 0.9), transparent);
-  background-size: 200% 100%;
-  animation: shimmer 5s infinite linear;
+    scrollbar-color: rgba(71, 85, 105, 0.4) transparent;
 }

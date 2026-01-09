@@ -7,34 +7,27 @@ export default {
     theme: {
         extend: {
             colors: {
-                background: "hsl(var(--background))",
-                foreground: "hsl(var(--foreground))",
                 sidebar: {
-                    DEFAULT: '#0B1F3F', // Navy Blue Deep (Be Lean Primary)
-                    hover: '#1B3155',   // Lighter Navy
-                    active: '#274472',  // Active State
-                    text: '#cbd5e1',    // Slate 300 (readable on navy)
-                    textActive: '#ffffff',
-                    border: '#1e3a8a',  // Blue 900
+                    DEFAULT: '#0f172a', // Slate 900
+                    hover: '#1e293b',   // Slate 800
+                    active: '#334155',  // Slate 700
+                    text: '#94a3b8',    // Slate 400
+                    textActive: '#f8fafc', // Slate 50
+                    border: '#334155',  // Slate 700
                 },
                 brand: {
-                    50: '#fff7ed',  // Orange 50
-                    100: '#ffedd5', // Orange 100
-                    200: '#fed7aa', // Orange 200
-                    300: '#fdba74', // Orange 300
-                    400: '#fb923c', // Orange 400
-                    500: '#f97316', // Orange 500 (Primary Brand Color)
-                    600: '#ea580c', // Orange 600
-                    700: '#c2410c', // Orange 700
-                    800: '#9a3412', // Orange 800
-                    900: '#7c2d12', // Orange 900
-                    950: '#431407', // Orange 950
+                    50: '#ecfeff',
+                    100: '#cffafe',
+                    200: '#a5f3fc',
+                    300: '#67e8f9',
+                    400: '#22d3ee',
+                    500: '#06b6d4', // Cyan 500
+                    600: '#0891b2', // Cyan 600
+                    700: '#0e7490',
+                    800: '#155e75',
+                    900: '#164e63', // Cyan 900
+                    950: '#083344',
                 },
-            },
-            borderRadius: {
-                lg: "var(--radius)",
-                md: "calc(var(--radius) - 2px)",
-                sm: "calc(var(--radius) - 4px)",
             },
             fontFamily: {
                 sans: ['Inter', 'system-ui', 'sans-serif'],
