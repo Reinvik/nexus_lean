@@ -140,7 +140,7 @@ export const DataProvider = ({ children }) => {
                     targetDate: c.due_date,
                     solutionDate: c.close_date, // close_date -> solutionDate
                     status: c.status,
-                    statusColor: c.status === 'Cerrado' ? '#10b981' : (c.status === 'En Progreso' ? '#f59e0b' : '#ef4444'),
+                    statusColor: c.status === 'Cerrado' ? '#10b981' : ((c.status === 'En Progreso' || c.status === 'En Proceso') ? '#f59e0b' : '#ef4444'),
                     type: c.category === 'Otro' ? 'Mejora' : c.category, // Map 'Otro' to 'Mejora' for UI
                     imageBefore: c.image_url || (c.image_urls && c.image_urls[0]) || null,
                     imageAfter: c.after_image_url,
