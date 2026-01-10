@@ -1,37 +1,61 @@
 <svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#0EA5E9" /> <!-- Sky 500 -->
-      <stop offset="100%" stop-color="#2563EB" /> <!-- Blue 600 -->
-    </linearGradient>
-    <linearGradient id="grad2" x1="0%" y1="0%" x2="100%" y2="100%">
+    <!-- Premium Blue Gradient -->
+    <linearGradient id="primaryGrad" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#38BDF8" /> <!-- Sky 400 -->
+      <stop offset="50%" stop-color="#0EA5E9" /> <!-- Sky 500 -->
       <stop offset="100%" stop-color="#0284C7" /> <!-- Sky 600 -->
     </linearGradient>
+    
+    <!-- Darker gradient for depth -->
+    <linearGradient id="darkGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0369A1" /> <!-- Sky 700 -->
+      <stop offset="100%" stop-color="#075985" /> <!-- Sky 800 -->
+    </linearGradient>
+    
+    <!-- Light gradient for highlights -->
+    <linearGradient id="lightGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#7DD3FC" /> <!-- Sky 300 -->
+      <stop offset="100%" stop-color="#38BDF8" /> <!-- Sky 400 -->
+    </linearGradient>
+    
+    <!-- Drop shadow -->
     <filter id="dropShadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur in="SourceAlpha" stdDeviation="15"/>
-      <feOffset dx="5" dy="10" result="offsetblur"/>
-      <feComponentTransfer>
-        <feFuncA type="linear" slope="0.3"/>
-      </feComponentTransfer>
-      <feMerge> 
-        <feMergeNode/>
-        <feMergeNode in="SourceGraphic"/> 
-      </feMerge>
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#0369A1" flood-opacity="0.25"/>
     </filter>
   </defs>
   
   <g filter="url(#dropShadow)">
-    <!-- Left Vertical Bar -->
-    <path d="M96 64 H192 V330 L96 448 Z" fill="url(#grad1)" />
+    <!-- Left vertical bar of N - starts at x=80 ends at x=170 -->
+    <path 
+      d="M80 64 L170 64 L170 340 L80 440 Z" 
+      fill="url(#primaryGrad)"
+    />
     
-    <!-- Right Vertical Bar -->
-    <path d="M320 64 L416 182 V448 H320 Z" fill="url(#grad1)" />
+    <!-- Diagonal connection - starts FROM left bar (overlaps), goes to right bar -->
+    <path 
+      d="M80 64 L170 64 L412 440 L320 440 Z" 
+      fill="url(#darkGrad)"
+    />
     
-    <!-- Diagonal Bar (Connecting Top-Left to Bottom-Right) -->
-    <path d="M192 64 L320 64 L320 160 L192 448 Z" fill="#0369A1" opacity="0.3" /> <!-- Shadow hint behind? No -->
+    <!-- Right vertical bar of N -->
+    <path 
+      d="M320 64 L412 160 L412 440 L320 440 Z" 
+      fill="url(#primaryGrad)"
+    />
     
-    <!-- Real Diagonal -->
-    <path d="M192 64 L416 448 H320 L96 64 H192 Z" fill="url(#grad2)" />
+    <!-- Highlight on left bar -->
+    <path 
+      d="M80 64 L115 64 L115 380 L80 440 Z" 
+      fill="url(#lightGrad)"
+      opacity="0.35"
+    />
+    
+    <!-- Highlight on right bar -->
+    <path 
+      d="M375 160 L412 160 L412 440 L375 440 Z" 
+      fill="url(#lightGrad)"
+      opacity="0.25"
+    />
   </g>
 </svg>

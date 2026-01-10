@@ -25,6 +25,7 @@ export type Company = {
     name: string;
     created_at: string;
     updated_at: string;
+    allowed_modules?: string[] | null; // Added for module management
 };
 
 export type Profile = {

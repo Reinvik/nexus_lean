@@ -6,7 +6,7 @@ const A3ActionPlan = ({ actions, onChange, users = [] }) => {
     const [newItem, setNewItem] = useState({ activity: '', responsible: '', date: '' });
 
     const handleAdd = () => {
-        if (!newItem.activity) return;
+        if (!newItem.activity || !newItem.responsible || !newItem.date) return;
         const newAction = {
             id: Date.now(),
             activity: newItem.activity,
@@ -59,7 +59,7 @@ const A3ActionPlan = ({ actions, onChange, users = [] }) => {
                                 >
                                     <option value="" className="text-slate-500">Seleccionar...</option>
                                     {users.map(u => (
-                                        <option key={u.uid || u.id || u.name} value={u.name} className="text-slate-900">{u.name}</option>
+                                        <option key={u.id || u.uid} value={u.full_name || u.name} className="text-slate-900">{u.full_name || u.name}</option>
                                     ))}
                                 </select>
                             ) : (
@@ -88,8 +88,11 @@ const A3ActionPlan = ({ actions, onChange, users = [] }) => {
                     <div className="md:col-span-1">
                         <button
                             onClick={handleAdd}
-                            disabled={!newItem.activity}
-                            className="w-full h-[42px] bg-brand-600 hover:bg-brand-700 text-white rounded-lg flex items-center justify-center transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-md shadow-brand-500/30 active:scale-95"
+                            disabled={!newItem.activity || !newItem.responsible || !newItem.date}
+                            className={`w-full h-[42px] rounded-lg flex items-center justify-center transition-all shadow-md active:scale-95 ${(!newItem.activity || !newItem.responsible || !newItem.date)
+                                ? 'bg-slate-300 text-slate-500 cursor-not-allowed opacity-70'
+                                : 'bg-brand-600 hover:bg-brand-700 text-white shadow-brand-500/30'
+                                }`}
                             title="Agregar tarea al plan"
                         >
                             <Plus size={20} strokeWidth={3} />

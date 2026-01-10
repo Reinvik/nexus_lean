@@ -156,27 +156,38 @@ const Dashboard = () => {
                 }));
 
                 // --- Process Activity Feed ---
-                const recentActivity = [
-                    // Map five_s_cards with correct column names
-                    ...(recFiveS.data || []).map(i => ({
+                // --- Process Activity Feed ---
+                const allowedModules = user.allowedModules || ['5s', 'a3', 'vsm', 'quick_wins', 'auditoria_5s', 'consultor_ia'];
+
+                const recentActivity = [];
+
+                if (allowedModules.includes('5s')) {
+                    recentActivity.push(...(recFiveS.data || []).map(i => ({
                         ...i,
                         type: '5S',
                         rawDate: i.created_at,
-                        location: i.area, // Map area -> location
-                        reason: i.findings, // Map findings -> reason
-                        responsible: i.assigned_user?.full_name || i.assigned_to || null // Use joined user name
-                    })),
-                    ...(recQw.data || []).map(i => ({ ...i, type: 'QW', rawDate: i.created_at })),
-                    ...a3List.map(i => ({ ...i, type: 'A3', rawDate: i.created_at }))
-                ].sort((a, b) => new Date(b.rawDate) - new Date(a.rawDate)).slice(0, 15);
+                        location: i.area,
+                        reason: i.findings,
+                        responsible: i.assigned_user?.full_name || i.assigned_to || null
+                    })));
+                }
 
+                if (allowedModules.includes('quick_wins')) {
+                    recentActivity.push(...(recQw.data || []).map(i => ({ ...i, type: 'QW', rawDate: i.created_at })));
+                }
+
+                if (allowedModules.includes('a3')) {
+                    recentActivity.push(...a3List.map(i => ({ ...i, type: 'A3', rawDate: i.created_at })));
+                }
+
+                const sortedActivity = recentActivity.sort((a, b) => new Date(b.rawDate) - new Date(a.rawDate)).slice(0, 15);
 
                 setData({
                     fiveS,
                     quickWins,
                     vsms,
                     a3: a3List,
-                    recentActivity
+                    recentActivity: sortedActivity
                 });
 
             } catch (error) {
@@ -402,46 +413,54 @@ const Dashboard = () => {
 
             {/* Top Stats Row */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <Link to="/5s" className="block transform transition-transform hover:scale-105 active:scale-95">
-                    <StatCard
-                        title="Tarjetas 5S"
-                        value={metrics.fiveS.total}
-                        subtitle={`${metrics.fiveS.rate}% Cumplimiento`}
-                        icon={<ClipboardList />}
-                        variant="red"
-                        type="solid"
-                    />
-                </Link>
-                <Link to="/quick-wins" className="block transform transition-transform hover:scale-105 active:scale-95">
-                    <StatCard
-                        title="Quick Wins"
-                        value={metrics.quickWins.done}
-                        subtitle={`de ${metrics.quickWins.total} Ideas Registradas`}
-                        icon={<Zap size={28} />}
-                        variant="yellow"
-                        type="solid"
-                    />
-                </Link>
-                <Link to="/vsm" className="block transform transition-transform hover:scale-105 active:scale-95">
-                    <StatCard
-                        title="Mapas VSM"
-                        value={metrics.vsm.count}
-                        subtitle="Flujos de Valor Analizados"
-                        icon={<Activity size={28} />}
-                        variant="purple"
-                        type="solid"
-                    />
-                </Link>
-                <Link to="/a3" className="block transform transition-transform hover:scale-105 active:scale-95">
-                    <StatCard
-                        title="Impacto Alto"
-                        value={metrics.quickWins.impact}
-                        subtitle="Mejoras de Alto Impacto"
-                        icon={<Target size={28} />}
-                        variant="green"
-                        type="solid"
-                    />
-                </Link>
+                {(user?.allowedModules || ['5s']).includes('5s') && (
+                    <Link to="/5s" className="block transform transition-transform hover:scale-105 active:scale-95">
+                        <StatCard
+                            title="Tarjetas 5S"
+                            value={metrics.fiveS.total}
+                            subtitle={`${metrics.fiveS.rate}% Cumplimiento`}
+                            icon={<ClipboardList />}
+                            variant="red"
+                            type="solid"
+                        />
+                    </Link>
+                )}
+                {(user?.allowedModules || ['quick_wins']).includes('quick_wins') && (
+                    <Link to="/quick-wins" className="block transform transition-transform hover:scale-105 active:scale-95">
+                        <StatCard
+                            title="Quick Wins"
+                            value={metrics.quickWins.done}
+                            subtitle={`de ${metrics.quickWins.total} Ideas Registradas`}
+                            icon={<Zap size={28} />}
+                            variant="yellow"
+                            type="solid"
+                        />
+                    </Link>
+                )}
+                {(user?.allowedModules || ['vsm']).includes('vsm') && (
+                    <Link to="/vsm" className="block transform transition-transform hover:scale-105 active:scale-95">
+                        <StatCard
+                            title="Mapas VSM"
+                            value={metrics.vsm.count}
+                            subtitle="Flujos de Valor Analizados"
+                            icon={<Activity size={28} />}
+                            variant="purple"
+                            type="solid"
+                        />
+                    </Link>
+                )}
+                {(user?.allowedModules || ['a3']).includes('a3') && (
+                    <Link to="/a3" className="block transform transition-transform hover:scale-105 active:scale-95">
+                        <StatCard
+                            title="Impacto Alto"
+                            value={metrics.quickWins.impact}
+                            subtitle="Mejoras de Alto Impacto"
+                            icon={<Target size={28} />}
+                            variant="green"
+                            type="solid"
+                        />
+                    </Link>
+                )}
             </div>
 
             {/* Dashboard Main Content Grid */}
@@ -451,294 +470,304 @@ const Dashboard = () => {
                 <div className="col-span-1 lg:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-6">
 
                     {/* CARD 1: 5S */}
-                    <div className="bg-white p-6 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 flex flex-col items-center relative overflow-hidden h-[280px]">
-                        <h4 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-4 z-10 flex items-center gap-2">
-                            <ClipboardList size={16} /> Completado 5S
-                        </h4>
-                        <div className="w-full flex-1 relative z-10">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <PieChart>
-                                    <Pie
-                                        data={[{ value: metrics.fiveS.rate }, { value: 100 - metrics.fiveS.rate }]}
-                                        cx="50%"
-                                        cy="50%"
-                                        innerRadius={60}
-                                        outerRadius={80}
-                                        startAngle={90}
-                                        endAngle={-270}
-                                        dataKey="value"
-                                        stroke="none"
-                                    >
-                                        <Cell fill="#10b981" /> {/* Emerald-500 */}
-                                        <Cell fill="#f1f5f9" /> {/* Slate-100 */}
-                                    </Pie>
-                                </PieChart>
-                            </ResponsiveContainer>
-                            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                                <span className="text-4xl font-black text-emerald-500">{metrics.fiveS.rate}%</span>
-                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Avance</span>
+                    {(user?.allowedModules || ['5s']).includes('5s') && (
+                        <div className="bg-white p-6 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 flex flex-col items-center relative overflow-hidden h-[280px]">
+                            <h4 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-4 z-10 flex items-center gap-2">
+                                <ClipboardList size={16} /> Completado 5S
+                            </h4>
+                            <div className="w-full flex-1 relative z-10">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <PieChart>
+                                        <Pie
+                                            data={[{ value: metrics.fiveS.rate }, { value: 100 - metrics.fiveS.rate }]}
+                                            cx="50%"
+                                            cy="50%"
+                                            innerRadius={60}
+                                            outerRadius={80}
+                                            startAngle={90}
+                                            endAngle={-270}
+                                            dataKey="value"
+                                            stroke="none"
+                                        >
+                                            <Cell fill="#10b981" /> {/* Emerald-500 */}
+                                            <Cell fill="#f1f5f9" /> {/* Slate-100 */}
+                                        </Pie>
+                                    </PieChart>
+                                </ResponsiveContainer>
+                                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                                    <span className="text-4xl font-black text-emerald-500">{metrics.fiveS.rate}%</span>
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Avance</span>
+                                </div>
+                            </div>
+                            <div className="absolute -bottom-6 -right-6 opacity-5 rotate-12">
+                                <ClipboardList size={120} className="text-emerald-500" />
                             </div>
                         </div>
-                        <div className="absolute -bottom-6 -right-6 opacity-5 rotate-12">
-                            <ClipboardList size={120} className="text-emerald-500" />
-                        </div>
-                    </div>
+                    )}
 
                     {/* CARD 2: QUICK WINS */}
-                    <div className="bg-white p-6 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 flex flex-col items-center relative overflow-hidden h-[280px]">
-                        <h4 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-4 z-10 flex items-center gap-2">
-                            <Zap size={16} /> Quick Wins
-                        </h4>
-                        <div className="w-full flex-1 relative z-10">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <PieChart>
-                                    <Pie
-                                        data={[
-                                            { value: metrics.quickWins.total > 0 ? Math.round((metrics.quickWins.done / metrics.quickWins.total) * 100) : 0 },
-                                            { value: 100 - (metrics.quickWins.total > 0 ? Math.round((metrics.quickWins.done / metrics.quickWins.total) * 100) : 0) }
-                                        ]}
-                                        cx="50%"
-                                        cy="50%"
-                                        innerRadius={60}
-                                        outerRadius={80}
-                                        startAngle={90}
-                                        endAngle={-270}
-                                        dataKey="value"
-                                        stroke="none"
-                                    >
-                                        <Cell fill="#f59e0b" /> {/* Amber-500 */}
-                                        <Cell fill="#f1f5f9" />
-                                    </Pie>
-                                </PieChart>
-                            </ResponsiveContainer>
-                            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                                <span className="text-4xl font-black text-amber-500">
-                                    {metrics.quickWins.total > 0 ? Math.round((metrics.quickWins.done / metrics.quickWins.total) * 100) : 0}%
-                                </span>
-                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Implementado</span>
+                    {(user?.allowedModules || ['quick_wins']).includes('quick_wins') && (
+                        <div className="bg-white p-6 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 flex flex-col items-center relative overflow-hidden h-[280px]">
+                            <h4 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-4 z-10 flex items-center gap-2">
+                                <Zap size={16} /> Quick Wins
+                            </h4>
+                            <div className="w-full flex-1 relative z-10">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <PieChart>
+                                        <Pie
+                                            data={[
+                                                { value: metrics.quickWins.total > 0 ? Math.round((metrics.quickWins.done / metrics.quickWins.total) * 100) : 0 },
+                                                { value: 100 - (metrics.quickWins.total > 0 ? Math.round((metrics.quickWins.done / metrics.quickWins.total) * 100) : 0) }
+                                            ]}
+                                            cx="50%"
+                                            cy="50%"
+                                            innerRadius={60}
+                                            outerRadius={80}
+                                            startAngle={90}
+                                            endAngle={-270}
+                                            dataKey="value"
+                                            stroke="none"
+                                        >
+                                            <Cell fill="#f59e0b" /> {/* Amber-500 */}
+                                            <Cell fill="#f1f5f9" />
+                                        </Pie>
+                                    </PieChart>
+                                </ResponsiveContainer>
+                                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                                    <span className="text-4xl font-black text-amber-500">
+                                        {metrics.quickWins.total > 0 ? Math.round((metrics.quickWins.done / metrics.quickWins.total) * 100) : 0}%
+                                    </span>
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Implementado</span>
+                                </div>
+                            </div>
+                            <div className="absolute -bottom-6 -right-6 opacity-5 rotate-12">
+                                <Zap size={120} className="text-amber-500" />
                             </div>
                         </div>
-                        <div className="absolute -bottom-6 -right-6 opacity-5 rotate-12">
-                            <Zap size={120} className="text-amber-500" />
-                        </div>
-                    </div>
+                    )}
 
                     {/* CARD 3: A3 PROJECTS */}
-                    <div className="bg-white p-6 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 flex flex-col items-center relative overflow-hidden h-[280px]">
-                        <h4 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-4 z-10 flex items-center gap-2">
-                            <Activity size={16} /> Proyectos A3
-                        </h4>
-                        <div className="w-full flex-1 relative z-10">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <PieChart>
-                                    <Pie
-                                        data={[
-                                            { value: metrics.a3.rate },
-                                            { value: 100 - metrics.a3.rate }
-                                        ]}
-                                        cx="50%"
-                                        cy="50%"
-                                        innerRadius={60}
-                                        outerRadius={80}
-                                        startAngle={90}
-                                        endAngle={-270}
-                                        dataKey="value"
-                                        stroke="none"
-                                    >
-                                        <Cell fill="#6366f1" /> {/* Indigo-500 */}
-                                        <Cell fill="#f1f5f9" />
-                                    </Pie>
-                                </PieChart>
-                            </ResponsiveContainer>
-                            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                                <span className="text-4xl font-black text-indigo-500">
-                                    {metrics.a3.rate}%
-                                </span>
-                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Avance</span>
+                    {(user?.allowedModules || ['a3']).includes('a3') && (
+                        <div className="bg-white p-6 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 flex flex-col items-center relative overflow-hidden h-[280px]">
+                            <h4 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-4 z-10 flex items-center gap-2">
+                                <Activity size={16} /> Proyectos A3
+                            </h4>
+                            <div className="w-full flex-1 relative z-10">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <PieChart>
+                                        <Pie
+                                            data={[
+                                                { value: metrics.a3.rate },
+                                                { value: 100 - metrics.a3.rate }
+                                            ]}
+                                            cx="50%"
+                                            cy="50%"
+                                            innerRadius={60}
+                                            outerRadius={80}
+                                            startAngle={90}
+                                            endAngle={-270}
+                                            dataKey="value"
+                                            stroke="none"
+                                        >
+                                            <Cell fill="#6366f1" /> {/* Indigo-500 */}
+                                            <Cell fill="#f1f5f9" />
+                                        </Pie>
+                                    </PieChart>
+                                </ResponsiveContainer>
+                                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                                    <span className="text-4xl font-black text-indigo-500">
+                                        {metrics.a3.rate}%
+                                    </span>
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Avance</span>
+                                </div>
+                            </div>
+                            <div className="absolute -bottom-6 -right-6 opacity-5 rotate-12">
+                                <Activity size={120} className="text-indigo-500" />
                             </div>
                         </div>
-                        <div className="absolute -bottom-6 -right-6 opacity-5 rotate-12">
-                            <Activity size={120} className="text-indigo-500" />
-                        </div>
-                    </div>
+                    )}
 
                 </div>
 
                 {/* 5S Status Distribution - 1/3 Width */}
                 {/* 2. NEW SECTION: A3 KPI MONITORING (Moved Up) */}
-                <div className="col-span-full">
-                    <h3 className="text-lg font-bold text-slate-700 mb-6 flex items-center gap-2">
-                        <Activity size={20} className="text-indigo-600" /> Monitoreo de KPIs (Proyectos A3)
-                    </h3>
+                {(user?.allowedModules || ['a3']).includes('a3') && (
+                    <div className="col-span-full">
+                        <h3 className="text-lg font-bold text-slate-700 mb-6 flex items-center gap-2">
+                            <Activity size={20} className="text-indigo-600" /> Monitoreo de KPIs (Proyectos A3)
+                        </h3>
 
-                    {activeCharts.length > 0 ? (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                            {activeCharts.map((chart, idx) => {
-                                // Calculate Delta
-                                const firstValue = chart.data[0]?.value || 0;
-                                const lastValue = parseFloat(chart.lastValue) || 0;
-                                const deltaPercent = firstValue !== 0 ? ((lastValue - firstValue) / firstValue) * 100 : 0;
-                                const isPositive = deltaPercent >= 0;
-                                const deltaString = `${isPositive ? '+' : ''}${Math.round(deltaPercent)}% vs. inicio`;
+                        {activeCharts.length > 0 ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                                {activeCharts.map((chart, idx) => {
+                                    // Calculate Delta
+                                    const firstValue = chart.data[0]?.value || 0;
+                                    const lastValue = parseFloat(chart.lastValue) || 0;
+                                    const deltaPercent = firstValue !== 0 ? ((lastValue - firstValue) / firstValue) * 100 : 0;
+                                    const isPositive = deltaPercent >= 0;
+                                    const deltaString = `${isPositive ? '+' : ''}${Math.round(deltaPercent)}% vs. inicio`;
 
-                                // Dynamic Color Theme based on Index or Goal
-                                const colors = [
-                                    { stop1: '#8b5cf6', stop2: '#c4b5fd', stroke: '#7c3aed', bg: 'bg-purple-50', text: 'text-purple-600' }, // Purple
-                                    { stop1: '#10b981', stop2: '#6ee7b7', stroke: '#059669', bg: 'bg-emerald-50', text: 'text-emerald-600' }, // Emerald
-                                    { stop1: '#f59e0b', stop2: '#fcd34d', stroke: '#d97706', bg: 'bg-amber-50', text: 'text-amber-600' }, // Amber
-                                ];
-                                const theme = colors[idx % colors.length];
+                                    // Dynamic Color Theme based on Index or Goal
+                                    const colors = [
+                                        { stop1: '#8b5cf6', stop2: '#c4b5fd', stroke: '#7c3aed', bg: 'bg-purple-50', text: 'text-purple-600' }, // Purple
+                                        { stop1: '#10b981', stop2: '#6ee7b7', stroke: '#059669', bg: 'bg-emerald-50', text: 'text-emerald-600' }, // Emerald
+                                        { stop1: '#f59e0b', stop2: '#fcd34d', stroke: '#d97706', bg: 'bg-amber-50', text: 'text-amber-600' }, // Amber
+                                    ];
+                                    const theme = colors[idx % colors.length];
 
-                                return (
-                                    <div key={chart.uniqueId} className="bg-white p-6 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all border border-slate-100 flex flex-col justify-between h-[300px]">
+                                    return (
+                                        <div key={chart.uniqueId} className="bg-white p-6 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all border border-slate-100 flex flex-col justify-between h-[300px]">
 
-                                        {/* Header */}
-                                        <div className="flex justify-between items-start mb-2">
-                                            <div>
-                                                <h5 className="font-bold text-slate-500 text-sm">{chart.kpiName}</h5>
-                                                {/* Big Value */}
-                                                <div className="mt-2 flex items-baseline gap-2">
-                                                    <span className={`text-4xl font-black ${theme.text}`}>
-                                                        {chart.lastValue}{chart.isPercentage ? '%' : ''}
-                                                    </span>
+                                            {/* Header */}
+                                            <div className="flex justify-between items-start mb-2">
+                                                <div>
+                                                    <h5 className="font-bold text-slate-500 text-sm">{chart.kpiName}</h5>
+                                                    {/* Big Value */}
+                                                    <div className="mt-2 flex items-baseline gap-2">
+                                                        <span className={`text-4xl font-black ${theme.text}`}>
+                                                            {chart.lastValue}{chart.isPercentage ? '%' : ''}
+                                                        </span>
+                                                    </div>
+                                                    {/* Delta Badge */}
+                                                    <div className="mt-1 flex items-center gap-1.5 text-xs font-bold text-slate-400">
+                                                        <span className={`${isPositive ? 'text-emerald-500' : 'text-rose-500'}`}>
+                                                            {deltaString}
+                                                        </span>
+                                                    </div>
                                                 </div>
-                                                {/* Delta Badge */}
-                                                <div className="mt-1 flex items-center gap-1.5 text-xs font-bold text-slate-400">
-                                                    <span className={`${isPositive ? 'text-emerald-500' : 'text-rose-500'}`}>
-                                                        {deltaString}
-                                                    </span>
+                                                <div className={`w-10 h-10 rounded-full ${theme.bg} flex items-center justify-center ${theme.text}`}>
+                                                    <Activity size={20} />
                                                 </div>
                                             </div>
-                                            <div className={`w-10 h-10 rounded-full ${theme.bg} flex items-center justify-center ${theme.text}`}>
-                                                <Activity size={20} />
+
+                                            {/* Chart Area */}
+                                            <div className="flex-1 w-full min-h-[120px] -mx-2 overflow-hidden">
+                                                <ResponsiveContainer width="100%" height="100%">
+                                                    <AreaChart data={chart.data}>
+                                                        <defs>
+                                                            <linearGradient id={`gradient-${chart.uniqueId}`} x1="0" y1="0" x2="0" y2="1">
+                                                                <stop offset="5%" stopColor={theme.stop1} stopOpacity={0.3} />
+                                                                <stop offset="95%" stopColor={theme.stop1} stopOpacity={0} />
+                                                            </linearGradient>
+                                                        </defs>
+                                                        <XAxis dataKey="date" hide />
+                                                        <Tooltip
+                                                            contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 10px rgba(0,0,0,0.1)', fontSize: '12px' }}
+                                                            formatter={(value) => [chart.isPercentage ? `${value}%` : value, 'Valor']}
+                                                            labelFormatter={(label) => new Date(label).toLocaleDateString()}
+                                                        />
+                                                        <Area
+                                                            type="monotone"
+                                                            dataKey="value"
+                                                            stroke={theme.stroke}
+                                                            strokeWidth={3}
+                                                            fill={`url(#gradient-${chart.uniqueId})`}
+                                                            activeDot={{ r: 6, strokeWidth: 2, stroke: '#fff' }}
+                                                        />
+                                                    </AreaChart>
+                                                </ResponsiveContainer>
+                                            </div>
+
+                                            {/* Footer X-Axis Labels Simulation */}
+                                            <div className="flex justify-between text-[10px] text-slate-300 font-bold uppercase tracking-wider mt-2 border-t border-slate-50 pt-2">
+                                                <span>{chart.data[0] ? new Date(chart.data[0].date).toLocaleDateString('es-ES', { month: 'short' }) : ''}</span>
+                                                <span>{chart.projectTitle}</span>
+                                                <span>{chart.data[chart.data.length - 1] ? new Date(chart.data[chart.data.length - 1].date).toLocaleDateString('es-ES', { month: 'short' }) : ''}</span>
                                             </div>
                                         </div>
-
-                                        {/* Chart Area */}
-                                        <div className="flex-1 w-full min-h-[120px] -mx-2 overflow-hidden">
-                                            <ResponsiveContainer width="100%" height="100%">
-                                                <AreaChart data={chart.data}>
-                                                    <defs>
-                                                        <linearGradient id={`gradient-${chart.uniqueId}`} x1="0" y1="0" x2="0" y2="1">
-                                                            <stop offset="5%" stopColor={theme.stop1} stopOpacity={0.3} />
-                                                            <stop offset="95%" stopColor={theme.stop1} stopOpacity={0} />
-                                                        </linearGradient>
-                                                    </defs>
-                                                    <XAxis dataKey="date" hide />
-                                                    <Tooltip
-                                                        contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 10px rgba(0,0,0,0.1)', fontSize: '12px' }}
-                                                        formatter={(value) => [chart.isPercentage ? `${value}%` : value, 'Valor']}
-                                                        labelFormatter={(label) => new Date(label).toLocaleDateString()}
-                                                    />
-                                                    <Area
-                                                        type="monotone"
-                                                        dataKey="value"
-                                                        stroke={theme.stroke}
-                                                        strokeWidth={3}
-                                                        fill={`url(#gradient-${chart.uniqueId})`}
-                                                        activeDot={{ r: 6, strokeWidth: 2, stroke: '#fff' }}
-                                                    />
-                                                </AreaChart>
-                                            </ResponsiveContainer>
-                                        </div>
-
-                                        {/* Footer X-Axis Labels Simulation */}
-                                        <div className="flex justify-between text-[10px] text-slate-300 font-bold uppercase tracking-wider mt-2 border-t border-slate-50 pt-2">
-                                            <span>{chart.data[0] ? new Date(chart.data[0].date).toLocaleDateString('es-ES', { month: 'short' }) : ''}</span>
-                                            <span>{chart.projectTitle}</span>
-                                            <span>{chart.data[chart.data.length - 1] ? new Date(chart.data[chart.data.length - 1].date).toLocaleDateString('es-ES', { month: 'short' }) : ''}</span>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    ) : (
-                        <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl p-12 text-center">
-                            <Activity size={48} className="text-slate-200 mx-auto mb-4" />
-                            <p className="text-slate-400 font-medium">No hay gráficos de seguimiento activos</p>
-                            <p className="text-xs text-slate-300">Crea un A3 y añade gráficos con &quot;Mostrar en Dashboard&quot; activo.</p>
-                        </div>
-                    )}
-                </div>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl p-12 text-center">
+                                <Activity size={48} className="text-slate-200 mx-auto mb-4" />
+                                <p className="text-slate-400 font-medium">No hay gráficos de seguimiento activos</p>
+                                <p className="text-xs text-slate-300">Crea un A3 y añade gráficos con &quot;Mostrar en Dashboard&quot; activo.</p>
+                            </div>
+                        )}
+                    </div>
+                )}
 
                 {/* 5S Status Distribution - REPLACED WITH AVERAGE CLOSURE TIME */}
-                <div className="bg-white p-6 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all border border-slate-100 lg:col-span-1 flex flex-col h-[340px] relative overflow-hidden">
-                    <h4 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-2 z-10 flex items-center gap-2">
-                        <CheckCircle size={16} className="text-emerald-500" /> Promedio de Cierre de Tarjetas 5S
-                    </h4>
+                {(user?.allowedModules || ['5s']).includes('5s') && (
+                    <div className="bg-white p-6 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all border border-slate-100 lg:col-span-1 flex flex-col h-[340px] relative overflow-hidden">
+                        <h4 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-2 z-10 flex items-center gap-2">
+                            <CheckCircle size={16} className="text-emerald-500" /> Promedio de Cierre de Tarjetas 5S
+                        </h4>
 
-                    <div className="w-full flex-1 relative z-10 -mt-2">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <PieChart>
-                                <Pie
-                                    data={[{ value: 100 }]}
-                                    cx="50%"
-                                    cy="50%"
-                                    innerRadius={70}
-                                    outerRadius={90}
-                                    startAngle={90}
-                                    endAngle={-270}
-                                    dataKey="value"
-                                    stroke="none"
-                                    isAnimationActive={true}
-                                >
-                                    <Cell fill="#10b981" fillOpacity={0.1} />
-                                </Pie>
-                                <Pie
-                                    data={[{ value: 100 }]} // Visual trick: Full ring but thin, or just rely on the background ring
-                                    cx="50%"
-                                    cy="50%"
-                                    innerRadius={70}
-                                    outerRadius={90}
-                                    startAngle={90}
-                                    endAngle={-270}
-                                    dataKey="value"
-                                    stroke="none"
-                                >
-                                    {/* Just a subtle border effect or leave empty if we just want the number */}
-                                    <Cell fill="transparent" stroke="#10b981" strokeWidth={0} />
-                                </Pie>
-                            </PieChart>
-                        </ResponsiveContainer>
+                        <div className="w-full flex-1 relative z-10 -mt-2">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                    <Pie
+                                        data={[{ value: 100 }]}
+                                        cx="50%"
+                                        cy="50%"
+                                        innerRadius={70}
+                                        outerRadius={90}
+                                        startAngle={90}
+                                        endAngle={-270}
+                                        dataKey="value"
+                                        stroke="none"
+                                        isAnimationActive={true}
+                                    >
+                                        <Cell fill="#10b981" fillOpacity={0.1} />
+                                    </Pie>
+                                    <Pie
+                                        data={[{ value: 100 }]} // Visual trick: Full ring but thin, or just rely on the background ring
+                                        cx="50%"
+                                        cy="50%"
+                                        innerRadius={70}
+                                        outerRadius={90}
+                                        startAngle={90}
+                                        endAngle={-270}
+                                        dataKey="value"
+                                        stroke="none"
+                                    >
+                                        {/* Just a subtle border effect or leave empty if we just want the number */}
+                                        <Cell fill="transparent" stroke="#10b981" strokeWidth={0} />
+                                    </Pie>
+                                </PieChart>
+                            </ResponsiveContainer>
 
-                        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                            <div className="relative">
-                                <span className="text-6xl font-black text-slate-700 tracking-tight">
-                                    {metrics.fiveS.avgClosure}
-                                </span>
-                                {parseFloat(metrics.fiveS.avgClosure) > 15 && (
-                                    <span className="absolute -top-2 -right-4 flex h-3 w-3">
-                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                                        <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-500"></span>
+                            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                                <div className="relative">
+                                    <span className="text-6xl font-black text-slate-700 tracking-tight">
+                                        {metrics.fiveS.avgClosure}
                                     </span>
-                                )}
-                            </div>
-                            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Días Promedio</span>
-                        </div>
-                    </div>
-
-                    <div className="absolute -bottom-8 -right-8 opacity-[0.03] rotate-12 pointer-events-none">
-                        <CheckCircle size={180} className="text-emerald-500" />
-                    </div>
-
-                    {/* NEW COMPARISON FOOTER */}
-                    <div className="z-10 mt-auto w-full px-2">
-                        <div className="flex justify-between items-center bg-slate-50 rounded-lg p-2 text-xs">
-                            <div className="text-center">
-                                <p className="text-slate-400 font-bold uppercase text-[10px]">Más Rápida</p>
-                                <p className="text-emerald-600 font-bold">{metrics.fiveS.minClosure} <span className="text-[10px]">días</span></p>
-                            </div>
-                            <div className="h-6 w-px bg-slate-200"></div>
-                            <div className="text-center">
-                                <p className="text-slate-400 font-bold uppercase text-[10px]">Más Lenta</p>
-                                <p className="text-rose-600 font-bold">{metrics.fiveS.maxClosure} <span className="text-[10px]">días</span></p>
+                                    {parseFloat(metrics.fiveS.avgClosure) > 15 && (
+                                        <span className="absolute -top-2 -right-4 flex h-3 w-3">
+                                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                                            <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-500"></span>
+                                        </span>
+                                    )}
+                                </div>
+                                <span className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Días Promedio</span>
                             </div>
                         </div>
-                        <p className="text-[10px] text-slate-400 font-medium text-center mt-2 leading-tight">
-                            Tiempo promedio desde la detección<br />hasta el cierre del hallazgo.
-                        </p>
+
+                        <div className="absolute -bottom-8 -right-8 opacity-[0.03] rotate-12 pointer-events-none">
+                            <CheckCircle size={180} className="text-emerald-500" />
+                        </div>
+
+                        {/* NEW COMPARISON FOOTER */}
+                        <div className="z-10 mt-auto w-full px-2">
+                            <div className="flex justify-between items-center bg-slate-50 rounded-lg p-2 text-xs">
+                                <div className="text-center">
+                                    <p className="text-slate-400 font-bold uppercase text-[10px]">Más Rápida</p>
+                                    <p className="text-emerald-600 font-bold">{metrics.fiveS.minClosure} <span className="text-[10px]">días</span></p>
+                                </div>
+                                <div className="h-6 w-px bg-slate-200"></div>
+                                <div className="text-center">
+                                    <p className="text-slate-400 font-bold uppercase text-[10px]">Más Lenta</p>
+                                    <p className="text-rose-600 font-bold">{metrics.fiveS.maxClosure} <span className="text-[10px]">días</span></p>
+                                </div>
+                            </div>
+                            <p className="text-[10px] text-slate-400 font-medium text-center mt-2 leading-tight">
+                                Tiempo promedio desde la detección<br />hasta el cierre del hallazgo.
+                            </p>
+                        </div>
                     </div>
-                </div>
+                )}
 
                 {/* TIMELINE ACTIVITY FEED - Replaces Quick Wins List */}
                 <div className="bg-white p-6 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all border border-slate-100 lg:col-span-2 flex flex-col">

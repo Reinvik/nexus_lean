@@ -102,19 +102,28 @@ const Sidebar = ({ isOpen, onClose }) => {
         }
     };
 
-    const navItems = [
+    const allNavItems = [
         { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
-        { icon: ClipboardList, label: 'Tarjetas 5S', path: '/5s' },
-        { icon: ShieldCheck, label: 'Auditoría 5S', path: '/auditorias-5s' },
-        { icon: FileText, label: 'Proyectos A3', path: '/a3' },
-        { icon: Activity, label: 'VSM', path: '/vsm' },
-        { icon: Zap, label: 'Quick Wins', path: '/quick-wins' },
+        { icon: ClipboardList, label: 'Tarjetas 5S', path: '/5s', module: '5s' },
+        { icon: ShieldCheck, label: 'Auditoría 5S', path: '/auditorias-5s', module: 'auditoria_5s' },
+        { icon: FileText, label: 'Proyectos A3', path: '/a3', module: 'a3' },
+        { icon: Activity, label: 'VSM', path: '/vsm', module: 'vsm' },
+        { icon: Zap, label: 'Quick Wins', path: '/quick-wins', module: 'quick_wins' },
         { icon: Users, label: 'Responsables', path: '/responsables' },
     ];
 
+    const enabledModules = user?.allowedModules || ['5s', 'a3', 'vsm', 'quick_wins', 'auditoria_5s', 'consultor_ia'];
+
+    const navItems = allNavItems.filter(item => {
+        if (!item.module) return true;
+        return enabledModules.includes(item.module);
+    });
+
     if (user && (user.role === 'admin' || user.role === 'superadmin' || user.has_ai_access)) {
-        // Insert Consultant after Dashboard
-        navItems.splice(1, 0, { icon: Brain, label: 'Consultor IA', path: '/consultant' });
+        // Insert Consultant after Dashboard if enabled
+        if (enabledModules.includes('consultor_ia')) {
+            navItems.splice(1, 0, { icon: Brain, label: 'Consultor IA', path: '/consultant' });
+        }
     }
 
     if (user && (user.role === 'admin' || user.role === 'superadmin')) {

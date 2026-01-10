@@ -32,8 +32,20 @@ export const AuthProvider = ({ children }) => {
     // Auto-select first company if none selected
     useEffect(() => {
         if (companies.length > 0 && !globalFilterCompanyId) {
-            console.log("AuthContext: Auto-selecting first company:", companies[0]);
-            setGlobalFilterCompanyId(companies[0].id);
+            console.log("AuthContext: Auto-selecting company...");
+            // Prioritize "Nexus Lean" or "Be Lean" if available
+            const preferredCompany = companies.find(c =>
+                c.name.toLowerCase().includes('nexus') ||
+                c.name.toLowerCase().includes('lean')
+            );
+
+            if (preferredCompany) {
+                console.log("AuthContext: Auto-selected prefered:", preferredCompany.name);
+                setGlobalFilterCompanyId(preferredCompany.id);
+            } else {
+                console.log("AuthContext: Auto-selected first:", companies[0].name);
+                setGlobalFilterCompanyId(companies[0].id);
+            }
         }
     }, [companies]);
 
@@ -63,6 +75,17 @@ export const AuthProvider = ({ children }) => {
     useEffect(() => {
         fetchCompanies();
     }, []);
+
+    // Refresh profile permissions when Global Filter changes
+    useEffect(() => {
+        if (user && user.isGlobalAdmin) {
+            // We pass 'user' as authUser. 
+            // Since fetchProfile spreads it, it works, but ideally we should use the raw session user. 
+            // But we don't have it easily without getSession. 
+            // Using 'user' is safe enough as long as ID and Email are present.
+            fetchProfile(user);
+        }
+    }, [globalFilterCompanyId]);
 
     const refreshData = async () => {
         console.log("AuthContext: Refreshing data...");
@@ -274,6 +297,29 @@ export const AuthProvider = ({ children }) => {
             const isGlobalAdmin = isOwner || profileData.role === 'superadmin';
             const isCompanyAdmin = profileData.role === 'superuser' || profileData.role === 'admin';
 
+            // Fetch Allowed Modules for the Company
+            let allowedModules = ['5s', 'a3', 'vsm', 'quick_wins', 'auditoria_5s', 'consultor_ia']; // Default all
+
+            const targetCompanyId = isGlobalAdmin
+                ? (globalFilterCompanyId && globalFilterCompanyId !== 'all' ? globalFilterCompanyId : null)
+                : profileData.company_id;
+
+            if (targetCompanyId) {
+                try {
+                    const { data: companyData } = await supabase
+                        .from('companies')
+                        .select('allowed_modules')
+                        .eq('id', targetCompanyId)
+                        .single();
+
+                    if (companyData && companyData.allowed_modules) {
+                        allowedModules = companyData.allowed_modules;
+                    }
+                } catch (e) {
+                    console.warn("Error fetching company modules:", e);
+                }
+            }
+
             setUser({
                 ...authUser,
                 ...profileData,
@@ -283,7 +329,8 @@ export const AuthProvider = ({ children }) => {
                 canAccessAdmin: isGlobalAdmin || isCompanyAdmin,
                 isAuthorized: isGlobalAdmin ? true : profileData.is_authorized,
                 has_ai_access: isGlobalAdmin ? true : !!profileData.has_ai_access,
-                companyId: profileData.company_id
+                companyId: profileData.company_id,
+                allowedModules // Attach modules
                 // last_login is already in profileData (will be stale until reload, but updated in DB)
             });
             return;
