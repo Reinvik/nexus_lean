@@ -338,27 +338,30 @@ const ResponsablesPage = () => {
 
                                                     const appLink = window.location.origin;
 
-                                                    const subject = encodeURIComponent(`Reporte de Estado Nexus Be Lean`);
+                                                    const subject = encodeURIComponent(`Reporte de Estado Nexus Lean`);
 
-                                                    // Clean format per user request
-                                                    const body = encodeURIComponent(`Hola ${selectedResponsible.name},
+                                                    // Professional Clean Format (Text Only compatible with mailto)
+                                                    const body = encodeURIComponent(`Estimado/a ${selectedResponsible.name},
 
-Aquí tienes el resumen ejecutivo de tu carga de trabajo actual.
+A continuación se detalla el estado actual de sus asignaciones en la plataforma Nexus Lean.
+
+----------------------------------------
+RESUMEN DE ESTADO
+----------------------------------------
 ✅ Tareas Completadas: ${selectedResponsible.totalCompleted}
 ⚠️ Tareas Pendientes:  ${selectedResponsible.totalPending}
 
-
-Detalle de Tareas Pendientes:
-
+----------------------------------------
+DETALLE DE PENDIENTES
+----------------------------------------
 ${pendingTasks.length > 0 ? pendingTasks.map(t => `• [${t.type}] ${t.title} (${t.status})`).join('\n') : '• No hay tareas pendientes.'}
 
-
-🔗 Accede a la plataforma:
+----------------------------------------
+Para gestionar estas tareas, acceda a:
 ${appLink}
 
-
 Atentamente,
-Nexus Jarvis System | CIAL Alimentos`);
+Equipo Nexus`);
 
                                                     window.location.href = `mailto:${userEmail}?subject=${subject}&body=${body}`;
 
