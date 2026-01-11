@@ -48,6 +48,9 @@ const LoginPage = () => {
         if (!result.success) {
             setError('Credenciales no reconocidas. Revisa tu estándar de acceso.');
             setIsLoggingIn(false);
+        } else {
+            // Force full reload to ensure data freshness
+            window.location.href = '/';
         }
     };
 
