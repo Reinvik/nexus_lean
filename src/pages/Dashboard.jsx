@@ -233,44 +233,58 @@ const Dashboard = () => {
         const fiveSCompletion = fiveSTotal > 0 ? Math.round((fiveSClosed / fiveSTotal) * 100) : 0;
 
         // Calculate Average, Min, Max Closure Time
+        // Calculate Average, Min, Max Closure Time
+        // LOGIC UPDATE: 
+        // 1. Avg and Min based ONLY on Closed cards (Actual resolution speed).
+        // 2. Max (Slowest) based on ALL cards (Pending vs Resolved). A very old pending card should be the "Slowest" case.
+
+        const now = new Date();
         const closedCards = fiveS.filter(c => c.status === 'Cerrado');
-        let totalDays = 0;
+        const openCards = fiveS.filter(c => c.status !== 'Cerrado');
+
+        let totalDaysClosed = 0;
         let validClosedCount = 0;
-        let minDays = null;
-        let maxDays = null;
+        let minDays = null; // Cheapest closed
+        let maxDays = 0;    // Slowest (Open or Closed)
 
+        // 1. Process Closed Cards
         closedCards.forEach(c => {
-            // Ensure we have valid dates
             if (!c.date || !c.solutionDate) return;
-
             const start = new Date(c.date);
             const end = new Date(c.solutionDate);
-
-            // Check for Invalid Date
             if (isNaN(start.getTime()) || isNaN(end.getTime())) return;
 
-            // Calculate difference in milliseconds
-            const diffTime = end.getTime() - start.getTime();
-
-            // Convert to days
-            // Use Math.abs only if we suspect negative dates, but strictly end should be >= start.
-            // However, allowing negative (0) if closed immediately.
-            let days = diffTime / (1000 * 60 * 60 * 24);
-
-            // Correction: If less than 0 (e.g. clock skew), cap at 0
+            // Diff in Days
+            let days = (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24);
             if (days < 0) days = 0;
 
-            totalDays += days;
+            totalDaysClosed += days;
             validClosedCount++;
 
+            // Update Min (Fastest resolution)
             if (minDays === null || days < minDays) minDays = days;
-            if (maxDays === null || days > maxDays) maxDays = days;
+
+            // Update Max (Slowest resolution found so far)
+            if (days > maxDays) maxDays = days;
         });
 
-        // Avoid division by zero
-        const avgClosureDays = validClosedCount > 0 ? (totalDays / validClosedCount).toFixed(1) : "0.0";
+        // 2. Process Open Cards (For Max/Slowest Only)
+        openCards.forEach(c => {
+            if (!c.date) return;
+            const start = new Date(c.date);
+            if (isNaN(start.getTime())) return;
+
+            // Diff from creation to NOW
+            let daysPending = (now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24);
+            if (daysPending < 0) daysPending = 0;
+
+            // Update Max if this pending card is older than the slowest closed card
+            if (daysPending > maxDays) maxDays = daysPending;
+        });
+
+        const avgClosureDays = validClosedCount > 0 ? (totalDaysClosed / validClosedCount).toFixed(1) : "0.0";
         const fastestClosure = minDays !== null ? minDays.toFixed(1) : "0.0";
-        const slowestClosure = maxDays !== null ? maxDays.toFixed(1) : "0.0";
+        const slowestClosure = maxDays.toFixed(1);
 
 
         const winsDone = quickWins.filter(i => i.status === 'done').length;
