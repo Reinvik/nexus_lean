@@ -72,8 +72,8 @@ const ResponsablesPage = () => {
                 const isUserAdmin = u.role === 'admin';
 
                 // User request: "Admin no deberia aparecer en ninguna" implies hiding generic admins from this view
-                if (belongsToCompany && !isUserAdmin && u.name) {
-                    names.add(u.name);
+                if (belongsToCompany && !isUserAdmin && (u.full_name || u.name)) {
+                    names.add(u.full_name || u.name);
                 }
             });
         }
@@ -308,7 +308,8 @@ const ResponsablesPage = () => {
                                                     // 1. Find User Email
                                                     let userEmail = '';
                                                     if (companyUsers) {
-                                                        const u = companyUsers.find(user => user.name === selectedResponsible.name);
+                                                        // Fix: Check full_name as well, since DB profile uses full_name
+                                                        const u = companyUsers.find(user => (user.full_name || user.name) === selectedResponsible.name);
                                                         if (u && u.email) userEmail = u.email;
                                                     }
 
@@ -384,7 +385,7 @@ Nexus Jarvis System | CIAL Alimentos`);
                                     {/* AI Access Toggle */}
                                     {user?.role === 'admin' && (() => {
                                         // Retrieve the actual user object from companyUsers to check properties
-                                        const actualUser = companyUsers?.find(u => u.name === selectedResponsible.name);
+                                        const actualUser = companyUsers?.find(u => (u.full_name || u.name) === selectedResponsible.name);
                                         // Only show if we found the user and they have an ID (not just a name from a card)
                                         if (actualUser && actualUser.id) {
                                             return (

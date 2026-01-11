@@ -926,6 +926,11 @@ const FiveSPage = () => {
                                         : 'bg-slate-100 text-slate-600 border-slate-200 group-hover:bg-brand-50 group-hover:text-brand-600 group-hover:border-brand-100'
                                         }`}>
                                         #{!isNaN(card.cardNumber) ? String(card.cardNumber).padStart(3, '0') : (card.cardNumber || '?')}
+                                        {user?.isGlobalAdmin && companies.find(c => c.id === card.companyId) && (
+                                            <span className="ml-1.5 font-normal opacity-80 text-[10px] capitalize">
+                                                {companies.find(c => c.id === card.companyId)?.name}
+                                            </span>
+                                        )}
                                     </span>
                                     {card.isOffline ? (
                                         <span className="text-xs text-slate-500 font-bold flex items-center gap-1 bg-yellow-100 px-2 py-0.5 rounded-full border border-yellow-200">
