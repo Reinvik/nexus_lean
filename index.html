@@ -15,7 +15,7 @@
       left: 0;
       width: 100%;
       height: 100%;
-      background-color: #0f172a;
+      background-color: #050B14;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -27,17 +27,43 @@
     .splash-logo {
       width: 120px;
       height: 120px;
-      margin-bottom: 20px;
+      margin-bottom: 32px;
+      /* gap-8 equiv 2rem */
+      filter: drop-shadow(0 25px 25px rgb(0 0 0 / 0.15));
       animation: pulse 2s infinite ease-in-out;
+    }
+
+    .splash-spinner-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      /* gap-4 */
     }
 
     .splash-spinner {
       width: 40px;
       height: 40px;
-      border: 4px solid rgba(255, 255, 255, 0.1);
-      border-left-color: #3b82f6;
+      border: 4px solid #334155;
+      /* slate-700 */
+      border-top-color: #06b6d4;
+      /* cyan-500 */
       border-radius: 50%;
       animation: spin 1s linear infinite;
+    }
+
+    .splash-text {
+      font-family: ui-sans-serif, system-ui, sans-serif;
+      font-size: 0.875rem;
+      /* text-sm */
+      font-weight: 500;
+      /* font-medium */
+      color: rgba(6, 182, 212, 0.8);
+      /* text-cyan-500/80 */
+      letter-spacing: 0.1em;
+      /* tracking-widest */
+      text-transform: uppercase;
+      animation: pulse 2s infinite ease-in-out;
     }
 
     @keyframes pulse {
@@ -66,11 +92,14 @@
   </style>
 </head>
 
-<body style="background-color: #0f172a; margin: 0;">
+<body style="background-color: #050B14; margin: 0;">
   <!-- Splash Screen HTML -->
   <div id="splash-overlay">
-    <img src="/nexus-logo.svg" alt="Nexus Logo" class="splash-logo" />
-    <div class="splash-spinner"></div>
+    <img src="/nexus-logo.svg" alt="Nexus Lean" class="splash-logo" />
+    <div class="splash-spinner-container">
+      <div class="splash-spinner"></div>
+      <p class="splash-text">Iniciando Sistema Nexus...</p>
+    </div>
   </div>
 
   <div id="root"></div>

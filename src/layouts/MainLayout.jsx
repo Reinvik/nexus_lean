@@ -7,7 +7,7 @@ const MainLayout = () => {
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
     return (
-        <div className="flex h-screen w-full overflow-hidden bg-slate-50 flex-col md:flex-row">
+        <div className="flex h-[133.33vh] w-full overflow-hidden bg-slate-50 flex-col md:flex-row">
             {/* Mobile Header */}
             <div className="md:hidden bg-[#050B14] text-white h-16 flex items-center justify-between px-4 shrink-0 z-30 shadow-md border-b border-[#1E293B]">
                 <div className="flex items-center gap-2">
