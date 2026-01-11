@@ -756,7 +756,7 @@ const FiveSPage = () => {
     };
 
     return (
-        <div className="max-w-7xl mx-auto space-y-6 pb-20 animate-in fade-in duration-500">
+        <div className="w-full mx-auto space-y-6 pb-20 animate-in fade-in duration-500">
             <HeaderWithFilter
                 title="Tarjetas 5S"
                 subtitle="Gestión visual de anomalías y mejoras continuas"

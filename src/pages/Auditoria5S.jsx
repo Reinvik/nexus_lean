@@ -941,7 +941,7 @@ const Auditoria5S = () => {
                     </div>
                 </>
             ) : (
-                <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-200 max-w-7xl mx-auto animate-fadeIn">
+                <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-200 w-full mx-auto animate-fadeIn">
                     <form onSubmit={handleSubmit}>
                         {/* Company Selector for Superadmin if Global Filter is 'All' */}
                         {(user?.role === 'admin' || user?.role === 'superadmin') && (!user.company_id && globalFilterCompanyId === 'all') && (

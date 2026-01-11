@@ -82,7 +82,7 @@ const ConsultantPage = () => {
 
     if (!hasAIAccess) {
         return (
-            <div className="max-w-7xl mx-auto p-8 flex flex-col items-center justify-center h-[60vh] text-center">
+            <div className="w-full mx-auto p-8 flex flex-col items-center justify-center h-[60vh] text-center">
                 <div className="bg-slate-100 p-6 rounded-full mb-6">
                     <Brain size={48} className="text-slate-400" />
                 </div>
@@ -95,7 +95,7 @@ const ConsultantPage = () => {
     }
 
     return (
-        <div className="max-w-7xl mx-auto space-y-2 h-[calc(100vh-85px)] flex flex-col">
+        <div className="w-full mx-auto space-y-2 h-[calc(100vh-85px)] flex flex-col">
             <div className="flex flex-col xl:flex-row justify-between xl:items-end gap-2 shrink-0">
                 <HeaderWithFilter
                     title="Consultor IA"

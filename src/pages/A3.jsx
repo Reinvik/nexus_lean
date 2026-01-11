@@ -371,7 +371,7 @@ const A3Page = () => {
 
 
     return (
-        <div className="max-w-7xl mx-auto space-y-6 pb-20 animate-in fade-in duration-500">
+        <div className="w-full mx-auto space-y-6 pb-20 animate-in fade-in duration-500">
             <HeaderWithFilter
                 title="Proyectos A3"
                 subtitle="Metodología estructurada para análisis y resolución de problemas"
@@ -728,7 +728,7 @@ const A3Page = () => {
 
                             {/* TAB 2: ANÁLISIS WITH MULTIPLE TOOLS */}
                             {activeTab === 'analysis' && (
-                                <div className="max-w-7xl mx-auto space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                                <div className="w-full mx-auto space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-300">
                                     {/* Text Summary */}
                                     <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
                                         <h4 className="font-bold text-slate-800 border-b border-slate-100 pb-3 mb-4 flex items-center gap-3">
@@ -825,7 +825,7 @@ const A3Page = () => {
 
                             {/* TAB 3: PLAN & SEGUIMIENTO */}
                             {activeTab === 'plan' && (
-                                <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                                <div className="w-full mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
 
                                     {/* Contramedidas */}
                                     <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">

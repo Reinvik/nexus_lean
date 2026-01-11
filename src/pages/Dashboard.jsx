@@ -388,7 +388,7 @@ const Dashboard = () => {
     }
 
     return (
-        <div className={`max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500 pb-12 ${loading ? 'opacity-70 pointer-events-none' : ''}`}>
+        <div className={`w-full mx-auto space-y-8 animate-in fade-in duration-500 pb-12 ${loading ? 'opacity-70 pointer-events-none' : ''}`}>
             <HeaderWithFilter
                 title="Dashboard General"
                 subtitle="Visión global del desempeño operativo (KPIs)"

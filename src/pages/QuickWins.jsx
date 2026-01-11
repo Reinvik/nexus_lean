@@ -400,7 +400,7 @@ const QuickWinsPage = () => {
     };
 
     return (
-        <div className="max-w-7xl mx-auto space-y-8 pb-20 animate-in fade-in duration-500">
+        <div className="w-full mx-auto space-y-8 pb-20 animate-in fade-in duration-500">
             <HeaderWithFilter
                 title="Quick Wins (Mejoras Rápidas)"
                 subtitle="Registro y seguimiento de ideas de alto impacto y bajo esfuerzo"
