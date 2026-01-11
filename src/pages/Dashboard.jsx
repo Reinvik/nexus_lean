@@ -78,7 +78,7 @@ const Dashboard = () => {
 
                 // 1. FiveS Light Fetch - Use correct column names
                 const fiveSPromise = applyFilter(
-                    supabase.from('five_s_cards').select('id, status, company_id, created_at, close_date')
+                    supabase.from('five_s_cards').select('id, status, company_id, created_at, close_date, updated_at')
                 );
 
                 // 2. Quick Wins Light Fetch (Id, Status, Impact)
@@ -127,7 +127,8 @@ const Dashboard = () => {
                     status: c.status,
                     companyId: c.company_id,
                     date: c.created_at, // Map created_at -> date for compatibility
-                    solutionDate: c.close_date // Map close_date -> solutionDate
+                    solutionDate: c.close_date, // Map close_date -> solutionDate
+                    updatedAt: c.updated_at // Fallback for closure date
                 }));
 
                 const quickWins = (qwRes.data || []).map(w => ({
@@ -249,9 +250,13 @@ const Dashboard = () => {
 
         // 1. Process Closed Cards
         closedCards.forEach(c => {
-            if (!c.date || !c.solutionDate) return;
+            // Prefer solutionDate (close_date), fallback to updatedAt for legacy data
+            const endDateString = c.solutionDate || c.updatedAt;
+
+            if (!c.date || !endDateString) return;
             const start = new Date(c.date);
-            const end = new Date(c.solutionDate);
+            const end = new Date(endDateString);
+
             if (isNaN(start.getTime()) || isNaN(end.getTime())) return;
 
             // Diff in Days
