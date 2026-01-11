@@ -25,6 +25,21 @@ const formatDateForInput = (dateStr) => {
     }
 };
 
+// Helper: Convert timestamp to dd-mm-yyyy for display
+const formatDateForDisplay = (dateStr) => {
+    if (!dateStr) return '';
+    try {
+        const date = new Date(dateStr);
+        if (isNaN(date.getTime())) return '';
+        const day = String(date.getDate()).padStart(2, '0');
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const year = date.getFullYear();
+        return `${day}-${month}-${year}`;
+    } catch {
+        return '';
+    }
+};
+
 const FiveSPage = () => {
     const { user, globalFilterCompanyId, companyUsers } = useAuth();
     // Use the complete destructuring from legacy code
@@ -918,7 +933,7 @@ const FiveSPage = () => {
                                         </span>
                                     ) : (
                                         <span className="text-xs text-slate-400 font-medium flex items-center gap-1">
-                                            {card.date}
+                                            {formatDateForDisplay(card.date)}
                                         </span>
                                     )}
                                 </div>
