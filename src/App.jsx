@@ -1,4 +1,4 @@
-import { Suspense, lazy } from 'react';
+import { Suspense, lazy, useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { DataProvider } from './context/DataContext';
@@ -31,19 +31,61 @@ const SetPasswordPage = lazy(() => import('./pages/SetPassword'));
 const OfflineFiveS = lazy(() => import('./pages/OfflineFiveS'));
 const OfflineAudit = lazy(() => import('./pages/OfflineAudit'));
 
-const LoadingFallback = () => (
-  <div className="flex h-screen w-full items-center justify-center bg-[#0B1F3F]">
-    <div className="flex flex-col items-center gap-6">
-      <img src="/nexus-logo.svg" alt="Be Lean" className="h-24 w-auto drop-shadow-lg animate-pulse" />
-      <div className="flex flex-col items-center gap-4">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-500 border-t-transparent"></div>
-        <p className="text-sm font-medium text-slate-300">Cargando Sistema...</p>
+const LOADING_PHRASES = [
+  "Iniciando Sistema Nexus...",
+  "Conectando con el Gemba...",
+  "Cargando módulos de IA...",
+  "Estableciendo protocolos seguros...",
+  "Optimizando recursos...",
+  "Sincronizando estándares..."
+];
+
+const LoadingFallback = () => {
+  const [phraseIndex, setPhraseIndex] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setPhraseIndex((prev) => (prev + 1) % LOADING_PHRASES.length);
+    }, 2000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div className="flex h-screen w-full items-center justify-center bg-[#050B14]">
+      <div className="flex flex-col items-center gap-8">
+        <div className="relative">
+          <div className="absolute inset-0 bg-blue-500/20 blur-xl rounded-full animate-pulse"></div>
+          <img src="/nexus-logo.svg" alt="Nexus Lean" className="h-[120px] w-[120px] relative drop-shadow-2xl animate-pulse" />
+        </div>
+        <div className="flex flex-col items-center gap-4">
+          <div className="relative">
+            <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-700 border-t-cyan-500"></div>
+            <div className="absolute inset-0 h-10 w-10 animate-spin rounded-full border-4 border-transparent border-b-blue-500 opacity-50" style={{ animationDirection: 'reverse', animationDuration: '2s' }}></div>
+          </div>
+          <p className="text-sm font-medium text-cyan-500/80 tracking-widest uppercase animate-pulse">
+            {LOADING_PHRASES[phraseIndex]}
+          </p>
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 function App() {
+  // Handle splash screen removal
+  useEffect(() => {
+    const splash = document.getElementById('splash-overlay');
+    if (splash) {
+      // Small delay to ensure React has rendered the first frame
+      setTimeout(() => {
+        splash.style.opacity = '0';
+        setTimeout(() => {
+          splash.remove();
+        }, 500);
+      }, 100);
+    }
+  }, []);
+
   return (
     <AuthProvider>
       <DataProvider>

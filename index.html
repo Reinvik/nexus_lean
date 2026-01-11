@@ -77,19 +77,8 @@
   <script type="module" src="/src/main.tsx"></script>
 
   <script>
-    // Remove splash screen after app loads
-    window.addEventListener('load', () => {
-      // Small timeout to ensure smoothest transition and minimum logo visibility time
-      setTimeout(() => {
-        const splash = document.getElementById('splash-overlay');
-        if (splash) {
-          splash.style.opacity = '0';
-          setTimeout(() => {
-            splash.remove();
-          }, 500); // Wait for transition to finish
-        }
-      }, 2500); // Show logo for at least 2.5 seconds
-    });
+    // Splash screen removal is now handled in App.jsx to ensure React is ready
+
   </script>
 </body>
 
