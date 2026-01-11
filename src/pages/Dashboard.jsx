@@ -6,6 +6,7 @@ import HeaderWithFilter from '../components/HeaderWithFilter';
 import { Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, XAxis } from 'recharts';
 import { Activity, CheckCircle, Zap, ClipboardList, Target, Maximize2, Minimize2, RefreshCw } from 'lucide-react';
 import StatCard from '../components/StatCard';
+import LoadingScreen from '../components/LoadingScreen';
 
 
 const Dashboard = () => {
@@ -232,31 +233,44 @@ const Dashboard = () => {
         const fiveSCompletion = fiveSTotal > 0 ? Math.round((fiveSClosed / fiveSTotal) * 100) : 0;
 
         // Calculate Average, Min, Max Closure Time
-        const closedCards = fiveS.filter(c => c.status === 'Cerrado' && c.date && c.solutionDate);
+        const closedCards = fiveS.filter(c => c.status === 'Cerrado');
         let totalDays = 0;
+        let validClosedCount = 0;
         let minDays = null;
         let maxDays = null;
 
         closedCards.forEach(c => {
+            // Ensure we have valid dates
+            if (!c.date || !c.solutionDate) return;
+
             const start = new Date(c.date);
             const end = new Date(c.solutionDate);
-            if (!isNaN(start) && !isNaN(end)) {
-                // Difference in milliseconds
-                const diffTime = Math.abs(end - start);
-                // Convert to days (float for precision during sum, we can round later if needed, but usually 1 decimal is good)
-                // Use Math.max(0, ...) to avoid negative if dates are swapped
-                const days = Math.max(0, diffTime / (1000 * 60 * 60 * 24));
 
-                totalDays += days;
+            // Check for Invalid Date
+            if (isNaN(start.getTime()) || isNaN(end.getTime())) return;
 
-                if (minDays === null || days < minDays) minDays = days;
-                if (maxDays === null || days > maxDays) maxDays = days;
-            }
+            // Calculate difference in milliseconds
+            const diffTime = end.getTime() - start.getTime();
+
+            // Convert to days
+            // Use Math.abs only if we suspect negative dates, but strictly end should be >= start.
+            // However, allowing negative (0) if closed immediately.
+            let days = diffTime / (1000 * 60 * 60 * 24);
+
+            // Correction: If less than 0 (e.g. clock skew), cap at 0
+            if (days < 0) days = 0;
+
+            totalDays += days;
+            validClosedCount++;
+
+            if (minDays === null || days < minDays) minDays = days;
+            if (maxDays === null || days > maxDays) maxDays = days;
         });
 
-        const avgClosureDays = closedCards.length > 0 ? (totalDays / closedCards.length).toFixed(1) : 0;
-        const fastestClosure = minDays !== null ? minDays.toFixed(1) : 0;
-        const slowestClosure = maxDays !== null ? maxDays.toFixed(1) : 0;
+        // Avoid division by zero
+        const avgClosureDays = validClosedCount > 0 ? (totalDays / validClosedCount).toFixed(1) : "0.0";
+        const fastestClosure = minDays !== null ? minDays.toFixed(1) : "0.0";
+        const slowestClosure = maxDays !== null ? maxDays.toFixed(1) : "0.0";
 
 
         const winsDone = quickWins.filter(i => i.status === 'done').length;
@@ -367,7 +381,19 @@ const Dashboard = () => {
     ].filter(d => d.value > 0);
 
 
-    if (!user) return <div className="flex h-screen items-center justify-center text-slate-400">Cargando...</div>;
+    if (!user) return <LoadingScreen fullScreen={false} />;
+
+    // Show loading screen on initial load (when no data exists yet)
+    const isInitialLoading = loading &&
+        data.fiveS.length === 0 &&
+        data.quickWins.length === 0 &&
+        data.vsms.length === 0 &&
+        data.a3.length === 0 &&
+        (!data.recentActivity || data.recentActivity.length === 0);
+
+    if (isInitialLoading) {
+        return <LoadingScreen fullScreen={false} />;
+    }
 
     if (error) {
         return (

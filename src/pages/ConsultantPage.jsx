@@ -95,7 +95,7 @@ const ConsultantPage = () => {
     }
 
     return (
-        <div className="w-full mx-auto space-y-2 h-[calc(100vh-85px)] flex flex-col">
+        <div className="w-full mx-auto space-y-2 h-[calc(133.33vh-85px)] flex flex-col">
             <div className="flex flex-col xl:flex-row justify-between xl:items-end gap-2 shrink-0">
                 <HeaderWithFilter
                     title="Consultor IA"

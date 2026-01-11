@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, Navigate } from 'react-router-dom';
 import { Mail, Lock, ArrowRight, Loader2, WifiOff, ClipboardCheck, User } from 'lucide-react';
+import LoadingScreen from '../components/LoadingScreen';
+
+// ... existing LEAN_QUOTES constant logic stays in file, we are just modifying imports and component start
 
 const LEAN_QUOTES = [
     { text: "  Sin estándares no puede haber mejora.", author: "  Taiichi Ohno" },
@@ -13,7 +16,7 @@ const LEAN_QUOTES = [
 ];
 
 const LoginPage = () => {
-    const { login, user, loading } = useAuth();
+    const { login, logout, user, loading } = useAuth();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [role, setRole] = useState('colaborador'); // Default to collaborator
@@ -23,12 +26,8 @@ const LoginPage = () => {
     const [currentQuoteIndex, setCurrentQuoteIndex] = useState(0);
     const navigate = useNavigate();
 
-    // Redirect if already logged in
-    useEffect(() => {
-        if (!loading && user) {
-            navigate('/');
-        }
-    }, [user, loading, navigate]);
+    // Prevent rendering form if loading (User check handled in render)
+    if (loading) return <LoadingScreen fullScreen={true} />;
 
     // Rotate quotes
     useEffect(() => {
@@ -37,6 +36,26 @@ const LoginPage = () => {
         }, 15000);
         return () => clearInterval(interval);
     }, []);
+
+    // Load saved credentials
+    useEffect(() => {
+        const savedEmail = localStorage.getItem('saved_email');
+        const savedPassword = localStorage.getItem('saved_password');
+
+        if (savedEmail) {
+            setEmail(savedEmail);
+            setRememberMe(true);
+        }
+
+        if (savedPassword) {
+            try {
+                // Warning: Simple base64 decoding is NOT secure for production secrets
+                setPassword(atob(savedPassword));
+            } catch (e) {
+                console.error("Error decoding saved password");
+            }
+        }
+    }, [user]); // Re-run if user status changes (e.g. logout) to re-fill for convenience
 
     const handleLogin = async (e) => {
         e.preventDefault();
@@ -49,8 +68,19 @@ const LoginPage = () => {
             setError('Credenciales no reconocidas. Revisa tu estándar de acceso.');
             setIsLoggingIn(false);
         } else {
-            // Force full reload to ensure data freshness
-            window.location.href = '/';
+            // Save or Clear Credentials based on user preference
+            if (rememberMe) {
+                localStorage.setItem('saved_email', email);
+                // Simple encoding to prevent plain text read - NOT SECURE encryption
+                localStorage.setItem('saved_password', btoa(password));
+            } else {
+                localStorage.removeItem('saved_email');
+                localStorage.removeItem('saved_password');
+            }
+
+            // Do NOT reload. Let the state update propagate.
+            // visual feedback will switch to "Session Active" view defined in render.
+            setIsLoggingIn(false);
         }
     };
 
@@ -191,77 +221,106 @@ const LoginPage = () => {
                         </div>
                     )}
 
-                    <form onSubmit={handleLogin} className="space-y-6">
-                        <div className="space-y-2">
-                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">CORREO CORPORATIVO</label>
-                            <div className="relative group">
-                                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                    <Mail className="h-5 w-5 text-slate-600 group-focus-within:text-cyan-400 transition-colors" />
+                    {user ? (
+                        <div className="space-y-6 text-center animate-in fade-in zoom-in duration-300">
+                            <div className="mx-auto w-20 h-20 bg-cyan-500/10 rounded-full flex items-center justify-center mb-4 border border-cyan-500/30">
+                                <User className="w-10 h-10 text-cyan-400" />
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-bold text-white mb-2">¡Hola de nuevo!</h3>
+                                <p className="text-slate-400 text-sm mb-6">
+                                    Sesión activa como <span className="text-cyan-400 font-medium">{user.email}</span>
+                                </p>
+                            </div>
+
+                            <button
+                                onClick={() => navigate('/')}
+                                className="w-full bg-gradient-to-r from-cyan-400 to-blue-600 hover:from-cyan-300 hover:to-blue-500 text-white font-bold py-4 rounded-xl shadow-lg shadow-cyan-500/20 transform transition-all duration-200 hover:-translate-y-0.5 flex items-center justify-center gap-2 group"
+                            >
+                                <span>CONTINUAR AL SISTEMA</span>
+                                <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
+                            </button>
+
+                            <button
+                                onClick={logout}
+                                className="w-full bg-slate-800 border border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-white font-bold py-4 rounded-xl transition-all flex items-center justify-center gap-2"
+                            >
+                                <span>CERRAR SESIÓN</span>
+                            </button>
+                        </div>
+                    ) : (
+                        <form onSubmit={handleLogin} className="space-y-6">
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">CORREO CORPORATIVO</label>
+                                <div className="relative group">
+                                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                        <Mail className="h-5 w-5 text-slate-600 group-focus-within:text-cyan-400 transition-colors" />
+                                    </div>
+                                    <input
+                                        type="email"
+                                        className="w-full bg-slate-900 border border-slate-800 text-white rounded-xl py-3.5 pl-11 pr-4 placeholder-slate-600 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-all shadow-[inset_0_2px_4px_rgba(0,0,0,0.3)]"
+                                        placeholder="usuario@empresa.com"
+                                        value={email}
+                                        onChange={(e) => setEmail(e.target.value)}
+                                        required
+                                    />
                                 </div>
-                                <input
-                                    type="email"
-                                    className="w-full bg-slate-900 border border-slate-800 text-white rounded-xl py-3.5 pl-11 pr-4 placeholder-slate-600 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-all shadow-[inset_0_2px_4px_rgba(0,0,0,0.3)]"
-                                    placeholder="usuario@empresa.com"
-                                    value={email}
-                                    onChange={(e) => setEmail(e.target.value)}
-                                    required
-                                />
                             </div>
-                        </div>
 
-                        <div className="space-y-2">
-                            <div className="flex justify-between items-center">
-                                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">CLAVE DE ACCESO</label>
-                                <Link to="/forgot-password" className="text-xs text-cyan-500 hover:text-cyan-400 font-bold transition-colors">
-                                    ¿OLVIDASTE TU CLAVE?
-                                </Link>
-                            </div>
-                            <div className="relative group">
-                                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                    <Lock className="h-5 w-5 text-slate-600 group-focus-within:text-cyan-400 transition-colors" />
+                            <div className="space-y-2">
+                                <div className="flex justify-between items-center">
+                                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">CLAVE DE ACCESO</label>
+                                    <Link to="/forgot-password" className="text-xs text-cyan-500 hover:text-cyan-400 font-bold transition-colors">
+                                        ¿OLVIDASTE TU CLAVE?
+                                    </Link>
                                 </div>
-                                <input
-                                    type="password"
-                                    className="w-full bg-slate-900 border border-slate-800 text-white rounded-xl py-3.5 pl-11 pr-4 placeholder-slate-600 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-all shadow-[inset_0_2px_4px_rgba(0,0,0,0.3)]"
-                                    placeholder="••••••••••••"
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    required
-                                />
+                                <div className="relative group">
+                                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                        <Lock className="h-5 w-5 text-slate-600 group-focus-within:text-cyan-400 transition-colors" />
+                                    </div>
+                                    <input
+                                        type="password"
+                                        className="w-full bg-slate-900 border border-slate-800 text-white rounded-xl py-3.5 pl-11 pr-4 placeholder-slate-600 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-all shadow-[inset_0_2px_4px_rgba(0,0,0,0.3)]"
+                                        placeholder="••••••••••••"
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                        required
+                                    />
+                                </div>
                             </div>
-                        </div>
 
-                        <div className="flex items-center">
-                            <input
-                                id="remember-me"
-                                type="checkbox"
-                                checked={rememberMe}
-                                onChange={(e) => setRememberMe(e.target.checked)}
-                                className="h-4 w-4 rounded border-slate-700 bg-slate-800 text-cyan-500 focus:ring-offset-slate-900 focus:ring-cyan-500/30 accent-cyan-500"
-                            />
-                            <label htmlFor="remember-me" className="ml-2 block text-sm text-slate-400">
-                                Recordar mi sesión
-                            </label>
-                        </div>
+                            <div className="flex items-center">
+                                <input
+                                    id="remember-me"
+                                    type="checkbox"
+                                    checked={rememberMe}
+                                    onChange={(e) => setRememberMe(e.target.checked)}
+                                    className="h-4 w-4 rounded border-slate-700 bg-slate-800 text-cyan-500 focus:ring-offset-slate-900 focus:ring-cyan-500/30 accent-cyan-500"
+                                />
+                                <label htmlFor="remember-me" className="ml-2 block text-sm text-slate-400">
+                                    Recordar mi sesión
+                                </label>
+                            </div>
 
-                        <button
-                            type="submit"
-                            disabled={isLoggingIn || loading}
-                            className="w-full bg-gradient-to-r from-cyan-400 to-blue-600 hover:from-cyan-300 hover:to-blue-500 text-white font-bold py-4 rounded-xl shadow-lg shadow-cyan-500/20 transform transition-all duration-200 hover:-translate-y-0.5 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2 group"
-                        >
-                            {isLoggingIn || loading ? (
-                                <>
-                                    <Loader2 className="h-5 w-5 animate-spin" />
-                                    <span>Sincronizando con el Gemba...</span>
-                                </>
-                            ) : (
-                                <>
-                                    <span>INICIAR SESIÓN</span>
-                                    <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
-                                </>
-                            )}
-                        </button>
-                    </form>
+                            <button
+                                type="submit"
+                                disabled={isLoggingIn || loading}
+                                className="w-full bg-gradient-to-r from-cyan-400 to-blue-600 hover:from-cyan-300 hover:to-blue-500 text-white font-bold py-4 rounded-xl shadow-lg shadow-cyan-500/20 transform transition-all duration-200 hover:-translate-y-0.5 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2 group"
+                            >
+                                {isLoggingIn || loading ? (
+                                    <>
+                                        <Loader2 className="h-5 w-5 animate-spin" />
+                                        <span>Sincronizando con el Gemba...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <span>INICIAR SESIÓN</span>
+                                        <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
+                                    </>
+                                )}
+                            </button>
+                        </form>
+                    )}
 
 
 

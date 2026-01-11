@@ -1,6 +1,7 @@
 import { createContext, useState, useContext, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { offlineService } from '../services/offlineService';
+import LoadingScreen from '../components/LoadingScreen';
 
 const AuthContext = createContext({
     user: null,
@@ -644,15 +645,7 @@ export const AuthProvider = ({ children }) => {
             updateProfileName
         }}>
             {loading ? (
-                <div className="flex items-center justify-center h-screen bg-[#0B1F3F]">
-                    <div className="flex flex-col items-center gap-6">
-                        <img src="/nexus-logo.svg" alt="Be Lean" className="h-24 w-auto drop-shadow-lg animate-pulse" />
-                        <div className="flex flex-col items-center gap-4">
-                            <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-500 border-t-transparent"></div>
-                            <p className="text-sm font-medium text-slate-300">Iniciando Sistema...</p>
-                        </div>
-                    </div>
-                </div>
+                <LoadingScreen />
             ) : (
                 children
             )}

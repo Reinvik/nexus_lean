@@ -207,3 +207,29 @@ aside ::-webkit-scrollbar-thumb:hover {
 aside {
     scrollbar-color: rgba(71, 85, 105, 0.4) transparent;
 }
+
+/* Premium Pulse Animation - Syncs with HTML Splash */
+@keyframes premium-pulse {
+
+    0%,
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+
+    50% {
+        transform: scale(1.05);
+        opacity: 0.8;
+    }
+}
+
+.animate-premium-pulse {
+    animation: premium-pulse 2s infinite ease-in-out;
+}
+
+/* Reset box-sizing globally for consistency with Tailwind if missing */
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}

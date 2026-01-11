@@ -257,7 +257,7 @@ const AIConsultant = ({ data, companyName, apiKey, fullScreen = false, isSyncing
     }
 
     const containerClasses = isMaximized
-        ? "fixed inset-0 z-50 bg-white h-screen w-screen rounded-none flex flex-col"
+        ? "fixed inset-0 z-[9999] bg-white h-[133.33vh] w-full rounded-none flex flex-col"
         : `bg-white rounded-xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 overflow-hidden flex flex-col ${fullScreen ? 'h-full' : 'max-h-[800px]'}`;
 
     // In maximized mode, ensure it's always expanded
