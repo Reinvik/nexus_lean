@@ -16,7 +16,7 @@ const LEAN_QUOTES = [
 ];
 
 const LoginPage = () => {
-    const { login, logout, user, loading } = useAuth();
+    const { login, logout, user, loading, refreshData } = useAuth();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [role, setRole] = useState('colaborador'); // Default to collaborator
@@ -234,7 +234,10 @@ const LoginPage = () => {
                             </div>
 
                             <button
-                                onClick={() => navigate('/')}
+                                onClick={async () => {
+                                    await refreshData();
+                                    navigate('/');
+                                }}
                                 className="w-full bg-gradient-to-r from-cyan-400 to-blue-600 hover:from-cyan-300 hover:to-blue-500 text-white font-bold py-4 rounded-xl shadow-lg shadow-cyan-500/20 transform transition-all duration-200 hover:-translate-y-0.5 flex items-center justify-center gap-2 group"
                             >
                                 <span>CONTINUAR AL SISTEMA</span>
