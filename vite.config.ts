@@ -12,7 +12,7 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
       manifest: {
-        name: 'Nexus Be Lean - Gestión Operacional',
+        name: 'Nexus Enterprise',
         short_name: 'Nexus',
         description: 'Plataforma de Gestión Lean y 5S',
         theme_color: '#1e293b',

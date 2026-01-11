@@ -18,7 +18,7 @@ export default defineConfig({
             },
             includeAssets: ['nexus-logo.svg'],
             manifest: {
-                name: 'Nexus Be Lean',
+                name: 'Nexus Enterprise',
                 short_name: 'Nexus',
                 description: 'Plataforma de excelencia operacional y mejora continua',
                 theme_color: '#0f172a',
