@@ -9,7 +9,7 @@ const MainLayout = () => {
     return (
         <div className="flex h-screen w-screen overflow-hidden bg-slate-50 flex-col md:flex-row">
             {/* Mobile Header */}
-            <div className="md:hidden bg-sidebar text-white h-16 flex items-center justify-between px-4 shrink-0 z-30 shadow-md">
+            <div className="md:hidden bg-[#050B14] text-white h-16 flex items-center justify-between px-4 shrink-0 z-30 shadow-md border-b border-[#1E293B]">
                 <div className="flex items-center gap-2">
                     <img src="/nexus-logo.svg" alt="Nexus Lean" className="w-auto h-8" />
                 </div>

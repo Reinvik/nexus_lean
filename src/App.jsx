@@ -1,4 +1,4 @@
-import { Suspense, lazy, useState, useEffect } from 'react';
+import { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { DataProvider } from './context/DataContext';
@@ -44,20 +44,6 @@ const LoadingFallback = () => (
 );
 
 function App() {
-  const [showSplash, setShowSplash] = useState(true);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setShowSplash(false);
-    }, 500);
-
-    return () => clearTimeout(timer);
-  }, []);
-
-  if (showSplash) {
-    return <LoadingFallback />;
-  }
-
   return (
     <AuthProvider>
       <DataProvider>

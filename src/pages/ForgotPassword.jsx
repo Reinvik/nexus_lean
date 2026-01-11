@@ -31,64 +31,105 @@ const ForgotPasswordPage = () => {
     };
 
     return (
-        <div className="min-h-screen bg-slate-900 flex items-center justify-center relative overflow-hidden font-sans selection:bg-cyan-500/30">
-            {/* Ambient Background Effects */}
-            <div className="absolute top-0 left-0 w-full h-full overflow-hidden z-0">
-                <div className="absolute top-[-10%] left-[-10%] w-96 h-96 bg-purple-500/30 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob"></div>
-                <div className="absolute top-[-10%] right-[-10%] w-96 h-96 bg-cyan-500/30 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-2000"></div>
-                <div className="absolute -bottom-32 left-20 w-96 h-96 bg-blue-500/30 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-4000"></div>
+        <div className="min-h-screen bg-[#050B14] flex font-sans selection:bg-cyan-500/30 overflow-hidden">
+            {/* Left Panel - Hero Section (Premium Display) */}
+            <div className="hidden lg:flex lg:w-1/2 relative flex-col justify-between p-12 bg-gradient-to-br from-[#050B14] via-[#0A1628] to-[#050B14] overflow-hidden">
+                {/* Background Effects */}
+                <div className="absolute inset-0 z-0">
+                    <div className="absolute top-0 left-0 w-full h-full bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10 brightness-100 contrast-150"></div>
+                    <div className="absolute -top-[20%] -left-[10%] w-[800px] h-[800px] bg-blue-600/20 rounded-full mix-blend-screen filter blur-[100px] opacity-30 animate-blob"></div>
+                    <div className="absolute top-[20%] -right-[20%] w-[600px] h-[600px] bg-cyan-500/10 rounded-full mix-blend-screen filter blur-[80px] opacity-20 animate-blob animation-delay-2000"></div>
+                    <div className="absolute -bottom-[10%] left-[20%] w-[600px] h-[600px] bg-indigo-600/20 rounded-full mix-blend-screen filter blur-[100px] opacity-30 animate-blob animation-delay-4000"></div>
+                </div>
 
-                {/* Grid Overlay for texture */}
-                <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 brightness-100 contrast-150"></div>
+                {/* Content */}
+                <div className="relative z-10">
+                    <div className="flex items-center gap-3 mb-2">
+                        <div className="relative">
+                            <div className="absolute inset-0 bg-cyan-500 blur-lg opacity-40 rounded-full"></div>
+                            <img src="/nexus-logo.svg" alt="Nexus Logo" className="h-10 w-auto relative" />
+                        </div>
+                        <span className="text-xl font-bold tracking-tight text-white">NEXUS LEAN <span className="text-cyan-400">ULTRA BLUE</span></span>
+                    </div>
+                </div>
+
+                <div className="relative z-10 w-full max-w-xl mx-auto flex flex-col justify-center">
+                    <div className="self-start inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-950/30 border border-cyan-500/30 text-cyan-400 text-xs font-semibold tracking-wider uppercase mb-6 backdrop-blur-sm">
+                        <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
+                        Enterprise Premium
+                    </div>
+
+                    <h1 className="text-5xl md:text-6xl font-bold text-white leading-tight mb-6">
+                        Recupera tu <br />
+                        <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500">Acceso</span> <br />
+                        Seguro.
+                    </h1>
+
+                    <p className="text-slate-400 text-lg leading-relaxed mb-10 max-w-md">
+                        Restablece tu contraseña y vuelve a gestionar tu operación con la máxima seguridad.
+                    </p>
+
+                    {/* Abstract Visualization */}
+                    <div className="relative w-full h-64 rounded-2xl overflow-hidden border border-slate-800/50 shadow-2xl bg-slate-900/50 backdrop-blur-xl group">
+                        <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 via-transparent to-blue-600/5"></div>
+
+                        <div className="absolute inset-0 flex items-center justify-center opacity-60">
+                            <div className="absolute w-40 h-40 bg-cyan-500/20 rounded-full filter blur-xl animate-pulse"></div>
+                            <div className="grid grid-cols-6 gap-4 transform rotate-12">
+                                {[...Array(24)].map((_, i) => (
+                                    <div key={i} className="w-1 h-1 bg-cyan-400 rounded-full animate-float" style={{ animationDelay: `${i * 0.1}s` }}></div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="relative z-10 text-xs text-slate-500 font-medium">
+                    © {new Date().getFullYear()} NEXUS LEAN ULTRA BLUE. ALL RIGHTS RESERVED.
+                </div>
             </div>
 
-            <div className="w-full max-w-md p-8 relative z-10 animate-fade-in-up">
-                {/* Glass Card */}
-                <div className="glass-panel p-8 sm:p-10 rounded-2xl border border-slate-700/50 shadow-2xl backdrop-blur-xl relative overflow-hidden group">
+            {/* Right Panel - Register Form */}
+            <div className="w-full lg:w-1/2 flex flex-col justify-center items-center p-6 sm:p-12 relative bg-[#050B14]">
+                {/* Mobile Background Effects */}
+                <div className="absolute inset-0 lg:hidden overflow-hidden pointer-events-none">
+                    <div className="absolute top-[-20%] right-[-20%] w-96 h-96 bg-cyan-600/10 rounded-full filter blur-3xl opacity-20"></div>
+                </div>
 
-                    {/* Top decoration line */}
-                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-cyan-400 to-blue-500 opacity-50 group-hover:opacity-100 transition-opacity duration-500"></div>
-
-                    <div className="text-center mb-10 relative">
-                        <div className="inline-block relative">
-                            <h1 className="relative text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white via-blue-100 to-slate-200 tracking-tight mb-2">
-                                Recuperar Contraseña
-                            </h1>
+                <div className="w-full max-w-[420px] relative z-10">
+                    <div className="mb-8">
+                        <div className="mb-6 lg:hidden text-center">
+                            <img src="/nexus-logo.svg" alt="Nexus Logo" className="h-10 w-auto mx-auto mb-2" />
                         </div>
-                        <p className="text-slate-400 text-sm font-medium tracking-wide">
-                            Ingresa tu correo para restablecerla
-                        </p>
+                        <h2 className="text-3xl font-bold text-white mb-2">Recuperar Contraseña</h2>
+                        <p className="text-slate-400">Ingresa tu correo para recibir las instrucciones.</p>
                     </div>
 
                     {message && (
                         <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-4 py-3 rounded-lg mb-6 text-sm flex items-center animate-fade-in-up">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
-                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                            </svg>
+                            <span className="mr-2">✅</span>
                             {message}
                         </div>
                     )}
 
                     {error && (
                         <div className="bg-red-500/10 border border-red-500/20 text-red-400 px-4 py-3 rounded-lg mb-6 text-sm flex items-center animate-shake">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
-                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                            </svg>
+                            <span className="mr-2">⚠️</span>
                             {error}
                         </div>
                     )}
 
                     <form onSubmit={handleSubmit} className="space-y-6">
-                        <div className="space-y-1 group">
-                            <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider ml-1 group-focus-within:text-cyan-400 transition-colors">Correo Electrónico</label>
-                            <div className="relative transform transition-all duration-300 focus-within:scale-[1.02]">
-                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                    <Mail className="h-5 w-5 text-slate-500 group-focus-within:text-cyan-400 transition-colors" />
+                        <div className="space-y-2">
+                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Correo Electrónico</label>
+                            <div className="relative group">
+                                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                    <Mail className="h-5 w-5 text-slate-600 group-focus-within:text-cyan-400 transition-colors" />
                                 </div>
                                 <input
                                     type="email"
-                                    className="w-full bg-slate-900/50 border border-slate-700 text-slate-200 rounded-xl py-3 pl-10 pr-4 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500/50 transition-all duration-300 shadow-inner"
-                                    placeholder="nombre@empresa.com"
+                                    className="w-full bg-slate-900 border border-slate-800 text-white rounded-xl py-3.5 pl-11 pr-4 placeholder-slate-600 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-all shadow-[inset_0_2px_4px_rgba(0,0,0,0.3)]"
+                                    placeholder="tu@empresa.com"
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
                                     required
@@ -99,39 +140,27 @@ const ForgotPasswordPage = () => {
                         <button
                             type="submit"
                             disabled={isLoading}
-                            className="w-full relative overflow-hidden group bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-semibold py-3.5 rounded-xl shadow-lg shadow-blue-900/20 transform transition-all duration-300 hover:shadow-cyan-500/20 hover:-translate-y-0.5 disabled:opacity-70 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+                            className="w-full bg-gradient-to-r from-cyan-400 to-blue-600 hover:from-cyan-300 hover:to-blue-500 text-white font-bold py-4 rounded-xl shadow-lg shadow-cyan-500/20 transform transition-all duration-200 hover:-translate-y-0.5 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2 group"
                         >
-                            <span className="relative z-10 flex items-center justify-center gap-2">
-                                {isLoading ? (
-                                    <>
-                                        <Loader2 className="h-5 w-5 animate-spin" />
-                                        <span>Enviando...</span>
-                                    </>
-                                ) : (
-                                    <>
-                                        <span>Enviar Enlace</span>
-                                        <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
-                                    </>
-                                )}
-                            </span>
-
-                            {/* Shiny effect overlay */}
-                            <div className="absolute top-0 -inset-full h-full w-1/2 z-5 block transform -skew-x-12 bg-gradient-to-r from-transparent to-white opacity-20 group-hover:animate-shine" />
+                            {isLoading ? (
+                                <>
+                                    <Loader2 className="h-5 w-5 animate-spin" />
+                                    <span>Enviando...</span>
+                                </>
+                            ) : (
+                                <>
+                                    <span>ENVIAR ENLACE</span>
+                                    <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
+                                </>
+                            )}
                         </button>
                     </form>
 
-                    <div className="mt-8 text-center">
+                    <div className="mt-8 text-center pt-6 border-t border-slate-800/50">
                         <Link to="/login" className="inline-flex items-center gap-2 text-slate-400 hover:text-white font-medium transition-colors hover:translate-x-[-4px] duration-300">
-                            <ArrowLeft size={16} /> Volver al inicio de sesión
+                            <ArrowLeft size={16} /> Volver al Inicio de Sesión
                         </Link>
                     </div>
-                </div>
-
-                {/* Footer simple text */}
-                <div className="mt-6 text-center">
-                    <p className="text-slate-600 text-xs">
-                        &copy; {new Date().getFullYear()} Nexus System. v1.0.0
-                    </p>
                 </div>
             </div>
         </div>

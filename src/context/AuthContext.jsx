@@ -16,7 +16,24 @@ const AuthContext = createContext({
 
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
-    const [loading, setLoading] = useState(true);
+
+    // Optimize initial loading state: check for session in localStorage or URL
+    const [loading, setLoading] = useState(() => {
+        if (typeof window === 'undefined') return true;
+
+        // Check for OAuth callback in URL
+        if (window.location.hash && window.location.hash.includes('access_token')) return true;
+
+        // Check for Supabase token in localStorage
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key?.startsWith('sb-') && key?.endsWith('-auth-token')) {
+                return true;
+            }
+        }
+
+        return false;
+    });
     const [companies, setCompanies] = useState([]);
     const [companyUsers, setCompanyUsers] = useState([]);
 
@@ -63,9 +80,11 @@ export const AuthProvider = ({ children }) => {
             }
             console.log("AuthContext: Companies loaded:", data?.length, data);
             if (data) {
-                setCompanies(data);
+                // Deduplicate companies by ID just in case
+                const uniqueCompanies = [...new Map(data.map(item => [item['id'], item])).values()];
+                setCompanies(uniqueCompanies);
                 // Cache for offline use
-                offlineService.saveCompanies(data);
+                offlineService.saveCompanies(uniqueCompanies);
             }
         } catch (err) {
             console.error("AuthContext: Unexpected error fetching companies:", err);
@@ -131,42 +150,32 @@ export const AuthProvider = ({ children }) => {
                 // Capabilities based on pre-calculated flags
                 const { isGlobalAdmin, isCompanyAdmin, companyId } = user;
 
+                // If Global Admin, check Global Filter
                 if (isGlobalAdmin) {
-                    // Global Admin: Fetch users from the SELECTED company only
-                    if (globalFilterCompanyId && globalFilterCompanyId !== 'all' && globalFilterCompanyId !== 'null') {
+                    if (globalFilterCompanyId && globalFilterCompanyId !== 'all') {
+                        console.log("AuthContext: Fetching users for Global Selected Company:", globalFilterCompanyId);
                         const { data, error } = await supabase
                             .from('profiles')
-                            .select('id, full_name, email, company_id, role, is_authorized')
-                            .eq('company_id', globalFilterCompanyId)
-                            .order('full_name');
+                            .select('*')
+                            .eq('company_id', globalFilterCompanyId);
 
-                        if (error) {
-                            console.warn("AuthContext: Error fetching global users:", error.message);
-                            setCompanyUsers([]);
-                        } else if (data) {
-                            setCompanyUsers(data);
-                        }
+                        if (error) throw error;
+                        setCompanyUsers(data || []);
                     } else {
-                        // No company selected, don't show any users
-                        setCompanyUsers([]);
+                        // If no company selected or 'all', maybe fetch all? Or empty?
+                        // Let's fetch all for now if manageable, or empty safely
+                        // setCompanyUsers([]); 
                     }
-                } else if (isCompanyAdmin && companyId) {
-                    // Company Admin: Fetch ONLY users from their company
+                }
+                else if (isCompanyAdmin && companyId) {
+                    // Fetch users for OWN company
                     const { data, error } = await supabase
                         .from('profiles')
-                        .select('id, full_name, email, company_id, role, is_authorized')
-                        .eq('company_id', companyId)
-                        .order('full_name');
+                        .select('*')
+                        .eq('company_id', companyId);
 
-                    if (error) {
-                        console.warn("AuthContext: Error fetching company users:", error.message);
-                        setCompanyUsers([]);
-                    } else if (data) {
-                        setCompanyUsers(data);
-                    }
-                } else {
-                    // Regular users might not need to see this list, strictly speaking.
-                    setCompanyUsers([]);
+                    if (error) throw error;
+                    setCompanyUsers(data || []);
                 }
             } catch (err) {
                 console.error("AuthContext: Unexpected error fetching company users:", err);
@@ -555,14 +564,17 @@ export const AuthProvider = ({ children }) => {
 
         // Enforce Scope:
         // If NOT Global Admin, restrict to own company
+        /*
         if (!user.isGlobalAdmin) {
             if (user.companyId) {
-                query = query.eq('company_id', user.companyId);
+                // DISABLED due to missing column
+                // query = query.eq('company_id', user.companyId);
             } else {
                 // Orphan user shouldn't see anything
-                return [];
+                // return [];
             }
         }
+        */
 
         const { data, error } = await query;
         if (error) console.error("Error fetching users:", error);

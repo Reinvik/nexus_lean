@@ -475,7 +475,7 @@ const Dashboard = () => {
                             <h4 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-4 z-10 flex items-center gap-2">
                                 <ClipboardList size={16} /> Completado 5S
                             </h4>
-                            <div className="w-full flex-1 relative z-10">
+                            <div className="w-full h-56 relative z-10 min-w-0">
                                 <ResponsiveContainer width="100%" height="100%">
                                     <PieChart>
                                         <Pie
@@ -511,7 +511,7 @@ const Dashboard = () => {
                             <h4 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-4 z-10 flex items-center gap-2">
                                 <Zap size={16} /> Quick Wins
                             </h4>
-                            <div className="w-full flex-1 relative z-10">
+                            <div className="w-full h-56 relative z-10 min-w-0">
                                 <ResponsiveContainer width="100%" height="100%">
                                     <PieChart>
                                         <Pie
@@ -552,7 +552,7 @@ const Dashboard = () => {
                             <h4 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-4 z-10 flex items-center gap-2">
                                 <Activity size={16} /> Proyectos A3
                             </h4>
-                            <div className="w-full flex-1 relative z-10">
+                            <div className="w-full h-56 relative z-10 min-w-0">
                                 <ResponsiveContainer width="100%" height="100%">
                                     <PieChart>
                                         <Pie
@@ -641,7 +641,7 @@ const Dashboard = () => {
                                             </div>
 
                                             {/* Chart Area */}
-                                            <div className="flex-1 w-full min-h-[120px] -mx-2 overflow-hidden">
+                                            <div className="h-[200px] w-full -mx-2 overflow-hidden min-w-0">
                                                 <ResponsiveContainer width="100%" height="100%">
                                                     <AreaChart data={chart.data}>
                                                         <defs>
@@ -695,7 +695,7 @@ const Dashboard = () => {
                             <CheckCircle size={16} className="text-emerald-500" /> Promedio de Cierre de Tarjetas 5S
                         </h4>
 
-                        <div className="w-full flex-1 relative z-10 -mt-2">
+                        <div className="w-full h-56 relative z-10 -mt-2 min-w-0">
                             <ResponsiveContainer width="100%" height="100%">
                                 <PieChart>
                                     <Pie

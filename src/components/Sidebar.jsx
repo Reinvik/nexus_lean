@@ -143,56 +143,65 @@ const Sidebar = ({ isOpen, onClose }) => {
             <aside
                 className={`
                     fixed md:static inset-y-0 left-0 z-50
-                    w-64 bg-sidebar text-sidebar-text flex flex-col h-screen border-r border-sidebar-border shadow-xl
-                    transition-transform duration-300 ease-in-out
+                    w-72 bg-[#050B14] text-slate-300 flex flex-col h-screen border-r border-[#1E293B] shadow-2xl
+                    transition-transform duration-300 ease-in-out relative
                     ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
                 `}
             >
+                {/* Background Effects */}
+                <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
+                    <div className="absolute top-0 left-0 w-full h-full bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-5 brightness-100 contrast-150"></div>
+                    <div className="absolute top-[-20%] left-[-20%] w-64 h-64 bg-cyan-900/10 rounded-full blur-[60px]"></div>
+                    <div className="absolute bottom-[-10%] right-[-10%] w-64 h-64 bg-blue-900/10 rounded-full blur-[60px]"></div>
+                </div>
+
                 {/* Header / Logo */}
-                <div className="h-24 flex items-center justify-between px-6 border-b border-sidebar-border bg-sidebar/50 backdrop-blur-sm">
-                    <div className="flex items-center justify-center w-full px-2 gap-2">
-                        {/* Using Nexus Logo */}
-                        <img
-                            src="/nexus-logo.svg"
-                            alt="Nexus Be Lean"
-                            className="h-10 object-contain drop-shadow-[0_0_8px_rgba(59,130,246,0.5)]"
-                        />
-                        <span className="text-xl font-black text-white tracking-tight">Nexus <span className="text-blue-400">Lean</span></span>
+                <div className="h-24 flex items-center justify-between px-8 border-b border-[#1E293B] relative z-10 bg-[#050B14]/50 backdrop-blur-md">
+                    <div className="flex items-center gap-3">
+                        <div className="relative">
+                            <div className="absolute inset-0 bg-cyan-500 blur-md opacity-30 rounded-full"></div>
+                            <img
+                                src="/nexus-logo.svg"
+                                alt="Nexus Be Lean"
+                                className="h-9 w-auto relative drop-shadow-[0_0_8px_rgba(34,211,238,0.3)]"
+                            />
+                        </div>
+                        <span className="text-xl font-bold text-white tracking-tight">Nexus <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500">Lean</span></span>
                     </div>
                     {/* Mobile Close Button */}
-                    <button onClick={onClose} className="md:hidden text-slate-400 hover:text-white">
+                    <button onClick={onClose} className="md:hidden text-slate-400 hover:text-white transition-colors">
                         <X size={24} />
                     </button>
                 </div>
 
                 {/* Navigation */}
-                <nav className="flex-1 overflow-y-auto py-6 px-3 space-y-1">
-                    <div className="px-3 mb-2 text-xs font-bold text-slate-500 uppercase tracking-widest pl-4">Menu Principal</div>
-                    <div className="space-y-1">
+                <nav className="flex-1 overflow-y-auto py-8 px-4 space-y-2 relative z-10 scrollbar-hide">
+                    <div className="px-4 mb-4 text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">Menu Principal</div>
+                    <div className="space-y-1.5">
                         {navItems.map((item) => (
                             <NavLink
                                 key={item.path}
                                 to={item.path}
                                 onClick={() => onClose && window.innerWidth < 768 && onClose()} // Close on mobile click
                                 className={({ isActive }) => `
-                                    relative group flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-colors duration-200 focus:outline-none focus:ring-0
+                                    relative group flex items-center px-4 py-3.5 text-sm font-medium rounded-xl transition-all duration-300
                                     ${isActive
-                                        ? 'bg-gradient-to-r from-brand-600/20 to-brand-600/5 text-brand-400 shadow-lg shadow-brand-900/20 border border-brand-500/10'
-                                        : 'text-slate-400 hover:text-slate-100 hover:bg-white/5 border border-transparent'
+                                        ? 'bg-gradient-to-r from-cyan-500/10 to-blue-600/5 text-white shadow-[0_0_20px_rgba(6,182,212,0.1)]'
+                                        : 'text-slate-400 hover:text-white hover:bg-white/5'
                                     }
                                 `}
                             >
                                 {({ isActive }) => (
                                     <>
                                         {isActive && (
-                                            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-brand-500 rounded-r-full shadow-[0_0_12px_rgba(6,182,212,0.8)]"></div>
+                                            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-cyan-400 rounded-r-full shadow-[0_0_12px_rgba(34,211,238,0.8)]"></div>
                                         )}
                                         <item.icon
                                             size={20}
-                                            className={`mr-3 transition-transform duration-300 ${isActive ? 'text-brand-400 scale-110 drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]' : 'text-slate-500 group-hover:text-slate-300 group-hover:scale-105'}`}
+                                            className={`mr-3 transition-transform duration-300 ${isActive ? 'text-cyan-400 scale-110 drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]' : 'text-slate-500 group-hover:text-slate-300 group-hover:scale-105'}`}
                                             strokeWidth={isActive ? 2.5 : 2}
                                         />
-                                        <span className={`tracking-wide ${isActive ? 'font-bold' : ''}`}>
+                                        <span className={`tracking-wide ${isActive ? 'font-semibold' : ''}`}>
                                             {item.label}
                                         </span>
                                     </>
@@ -203,29 +212,29 @@ const Sidebar = ({ isOpen, onClose }) => {
                 </nav>
 
                 {/* User Profile */}
-                <div className="p-4 border-t border-sidebar-border bg-sidebar/30">
+                <div className="p-4 border-t border-[#1E293B] bg-[#020617]/50 relative z-10 backdrop-blur-sm">
                     <div
-                        className="flex items-center gap-3 p-2 rounded-lg hover:bg-sidebar-hover transition-colors cursor-pointer group"
+                        className="flex items-center gap-3 p-3 rounded-xl hover:bg-white/5 transition-colors cursor-pointer group border border-transparent hover:border-slate-800"
                         onClick={() => setIsAvatarModalOpen(true)}
                         title="Cambiar Foto de Perfil"
                     >
                         <div className="relative">
-                            <div className="w-10 h-10 rounded-full bg-indigo-500 flex items-center justify-center text-white font-bold text-sm overflow-hidden border-2 border-slate-600/50 group-hover:border-brand-500/50 transition-colors">
+                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-600 to-blue-700 flex items-center justify-center text-white font-bold text-sm overflow-hidden border border-slate-700 group-hover:border-cyan-500/50 shadow-lg transition-all">
                                 {avatarUrl ? (
                                     <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
                                 ) : (
                                     <span>{user?.name ? user.name.charAt(0) : 'U'}</span>
                                 )}
                             </div>
-                            <div className="absolute -bottom-1 -right-1 bg-sidebar border border-sidebar-border rounded-full p-0.5 text-slate-400 group-hover:text-brand-500 transition-colors">
+                            <div className="absolute -bottom-1 -right-1 bg-[#0F172A] border border-slate-700 rounded-full p-1 text-slate-400 group-hover:text-cyan-400 transition-colors">
                                 <Camera size={10} />
                             </div>
                         </div>
 
                         <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-white truncate group-hover:text-brand-100 transition-colors">{user?.name}</p>
-                            <p className="text-xs text-slate-500 truncate">
-                                {user?.role === 'superadmin' ? 'Super Admin' : user?.role === 'admin' ? 'Administrador' : 'Usuario'}
+                            <p className="text-sm font-semibold text-slate-200 truncate group-hover:text-white transition-colors">{user?.name || 'Usuario'}</p>
+                            <p className="text-xs text-slate-500 truncate group-hover:text-cyan-400/70 transition-colors">
+                                {user?.role === 'superadmin' ? 'Super Admin' : user?.role === 'admin' ? 'Administrador' : 'Colaborador'}
                             </p>
                         </div>
                     </div>
@@ -235,7 +244,7 @@ const Sidebar = ({ isOpen, onClose }) => {
                             await logout();
                             window.location.href = '/login'; // Force full redirect for Electron compatibility
                         }}
-                        className="mt-2 w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium text-slate-400 hover:text-white hover:bg-red-500/10 hover:border-red-500/20 border border-transparent rounded-lg transition-all duration-200"
+                        className="mt-3 w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-semibold text-slate-500 hover:text-red-400 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 rounded-lg transition-all duration-200"
                     >
                         <LogOut size={14} />
                         <span>Cerrar Sesión</span>
@@ -245,16 +254,19 @@ const Sidebar = ({ isOpen, onClose }) => {
                 {/* Avatar Modal */}
                 {
                     isAvatarModalOpen && (
-                        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setIsAvatarModalOpen(false)}>
-                            <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm transform transition-all scale-100" onClick={e => e.stopPropagation()}>
-                                <div className="flex justify-between items-center mb-6">
-                                    <h3 className="font-bold text-lg text-slate-800">Mi Perfil</h3>
-                                    <button onClick={() => setIsAvatarModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-100 transition-colors">
+                        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setIsAvatarModalOpen(false)}>
+                            <div className="bg-[#0F172A] border border-slate-800 rounded-2xl shadow-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto transform transition-all scale-100 relative" onClick={e => e.stopPropagation()}>
+                                {/* Modal Background Effects */}
+                                <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+                                <div className="flex justify-between items-center mb-6 relative z-10">
+                                    <h3 className="font-bold text-lg text-white">Mi Perfil</h3>
+                                    <button onClick={() => setIsAvatarModalOpen(false)} className="text-slate-400 hover:text-white p-1 rounded-full hover:bg-white/10 transition-colors">
                                         <X size={20} />
                                     </button>
                                 </div>
 
-                                <div className="h-64 mb-6 rounded-xl overflow-hidden border-2 border-dashed border-slate-200 bg-slate-50 relative group">
+                                <div className="h-48 md:h-64 mb-6 rounded-xl overflow-hidden border-2 border-dashed border-slate-700 bg-slate-900/50 relative group backdrop-blur-sm">
                                     <ImageUpload
                                         currentImage={avatarUrl}
                                         onUpload={handleAvatarUpdate}
@@ -263,14 +275,14 @@ const Sidebar = ({ isOpen, onClose }) => {
                                     />
                                 </div>
 
-                                <div className="flex justify-between items-center bg-slate-50 p-4 rounded-xl border border-slate-100 mb-6">
-                                    <span className="text-xs font-medium text-slate-500">Avatares predefinidos:</span>
+                                <div className="flex justify-between items-center bg-slate-900/50 p-4 rounded-xl border border-slate-800 mb-6">
+                                    <span className="text-xs font-medium text-slate-400">Avatares predefinidos:</span>
                                     <div className="flex gap-3">
                                         {['https://cdn-icons-png.flaticon.com/512/3135/3135715.png', 'https://cdn-icons-png.flaticon.com/512/3135/3135768.png'].map((url, i) => (
                                             <button
                                                 key={i}
                                                 onClick={() => handleAvatarUpdate(url)}
-                                                className="w-10 h-10 rounded-full border-2 border-white shadow-sm ring-1 ring-slate-200 hover:ring-brand-500 hover:scale-110 transition-all duration-200 overflow-hidden"
+                                                className="w-10 h-10 rounded-full border-2 border-[#1E293B] hover:border-cyan-500 shadow-sm transition-all duration-200 overflow-hidden transform hover:scale-110"
                                             >
                                                 <img src={url} className="w-full h-full object-cover" />
                                             </button>
@@ -278,10 +290,10 @@ const Sidebar = ({ isOpen, onClose }) => {
                                     </div>
                                 </div>
 
-                                <hr className="my-6 border-slate-100" />
+                                <hr className="my-6 border-slate-800" />
 
-                                <h4 className="text-sm font-bold text-slate-700 mb-4 flex items-center gap-2">
-                                    <User size={16} className="text-brand-500" /> Información Personal
+                                <h4 className="text-sm font-bold text-slate-300 mb-4 flex items-center gap-2">
+                                    <User size={16} className="text-cyan-400" /> Información Personal
                                 </h4>
 
                                 <form onSubmit={handleNameChange} className="space-y-4 mb-6">
@@ -289,7 +301,7 @@ const Sidebar = ({ isOpen, onClose }) => {
                                         <input
                                             type="text"
                                             placeholder="Nombre Completo"
-                                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all font-medium"
+                                            className="w-full px-3 py-2.5 bg-slate-900/50 border border-slate-700 text-white rounded-lg text-sm outline-none focus:ring-1 focus:ring-cyan-500 focus:border-cyan-500 transition-all font-medium placeholder-slate-600"
                                             value={name}
                                             onChange={(e) => setName(e.target.value)}
                                         />
@@ -297,16 +309,16 @@ const Sidebar = ({ isOpen, onClose }) => {
                                     <button
                                         type="submit"
                                         disabled={!name || name === user?.name || nameLoading}
-                                        className="w-full py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-900 transition-colors text-xs font-bold uppercase tracking-wider disabled:opacity-50"
+                                        className="w-full py-2.5 bg-slate-800 text-white rounded-lg hover:bg-slate-700 border border-slate-700 hover:border-slate-600 transition-all text-xs font-bold uppercase tracking-wider disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                         {nameLoading ? 'Actualizando...' : 'Actualizar Nombre'}
                                     </button>
                                 </form>
 
-                                <hr className="my-6 border-slate-100" />
+                                <hr className="my-6 border-slate-800" />
 
-                                <h4 className="text-sm font-bold text-slate-700 mb-4 flex items-center gap-2">
-                                    <ShieldCheck size={16} className="text-brand-500" /> Cambiar Contraseña
+                                <h4 className="text-sm font-bold text-slate-300 mb-4 flex items-center gap-2">
+                                    <ShieldCheck size={16} className="text-cyan-400" /> Cambiar Contraseña
                                 </h4>
 
                                 <form onSubmit={handlePasswordChange} className="space-y-4 mb-6">
@@ -314,7 +326,7 @@ const Sidebar = ({ isOpen, onClose }) => {
                                         <input
                                             type="password"
                                             placeholder="Nueva Contraseña"
-                                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
+                                            className="w-full px-3 py-2.5 bg-slate-900/50 border border-slate-700 text-white rounded-lg text-sm outline-none focus:ring-1 focus:ring-cyan-500 focus:border-cyan-500 transition-all placeholder-slate-600"
                                             value={newPassword}
                                             onChange={(e) => setNewPassword(e.target.value)}
                                             minLength={6}
@@ -324,7 +336,7 @@ const Sidebar = ({ isOpen, onClose }) => {
                                         <input
                                             type="password"
                                             placeholder="Confirmar Contraseña"
-                                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
+                                            className="w-full px-3 py-2.5 bg-slate-900/50 border border-slate-700 text-white rounded-lg text-sm outline-none focus:ring-1 focus:ring-cyan-500 focus:border-cyan-500 transition-all placeholder-slate-600"
                                             value={confirmNewPassword}
                                             onChange={(e) => setConfirmNewPassword(e.target.value)}
                                             minLength={6}
@@ -333,7 +345,7 @@ const Sidebar = ({ isOpen, onClose }) => {
                                     <button
                                         type="submit"
                                         disabled={!newPassword || passwordLoading}
-                                        className="w-full py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-900 transition-colors text-xs font-bold uppercase tracking-wider disabled:opacity-50"
+                                        className="w-full py-2.5 bg-slate-800 text-white rounded-lg hover:bg-slate-700 border border-slate-700 hover:border-slate-600 transition-all text-xs font-bold uppercase tracking-wider disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                         {passwordLoading ? 'Actualizando...' : 'Actualizar Contraseña'}
                                     </button>
@@ -341,7 +353,7 @@ const Sidebar = ({ isOpen, onClose }) => {
 
                                 <button
                                     onClick={() => setIsAvatarModalOpen(false)}
-                                    className="w-full py-2.5 bg-brand-600 text-white rounded-xl hover:bg-brand-700 transition-colors font-medium text-sm shadow-md shadow-brand-500/20 active:scale-95 duration-200"
+                                    className="w-full py-3 bg-gradient-to-r from-cyan-600 to-blue-600 text-white rounded-xl hover:from-cyan-500 hover:to-blue-500 transition-all font-bold text-sm shadow-lg shadow-cyan-900/20 active:scale-95 duration-200"
                                 >
                                     Cerrar
                                 </button>

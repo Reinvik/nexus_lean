@@ -147,14 +147,21 @@ const OfflineAudit = () => {
     }
 
     return (
-        <div className="min-h-screen bg-slate-100 pb-20">
+        <div className="min-h-screen bg-[#050B14] font-sans text-slate-300 selection:bg-cyan-500/30 pb-20 relative overflow-hidden">
+            {/* Background Effects */}
+            <div className="fixed inset-0 z-0 pointer-events-none">
+                <div className="absolute top-0 left-0 w-full h-full bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-5 brightness-100 contrast-150"></div>
+                <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-indigo-900/20 rounded-full blur-[100px] opacity-40"></div>
+                <div className="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-cyan-900/20 rounded-full blur-[100px] opacity-40"></div>
+            </div>
+
             {/* Header */}
-            <div className="bg-white shadow-sm sticky top-0 z-10">
+            <div className="bg-[#050B14]/80 backdrop-blur-md shadow-lg border-b border-slate-800 sticky top-0 z-20">
                 <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
-                    <button onClick={() => navigate('/login')} className="text-slate-500 hover:text-slate-700">
+                    <button onClick={() => navigate('/login')} className="text-slate-400 hover:text-white hover:bg-white/5 p-2 -ml-2 rounded-full transition-colors">
                         <ArrowLeft size={24} />
                     </button>
-                    <h1 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                    <h1 className="text-lg font-bold text-white flex items-center gap-2">
                         <WifiOff size={20} className="text-amber-500" />
                         Auditoría 5S Offline
                     </h1>
@@ -162,19 +169,32 @@ const OfflineAudit = () => {
                 </div>
             </div>
 
-            <main className="max-w-3xl mx-auto px-4 py-6">
+            <main className="max-w-3xl mx-auto px-4 py-8 relative z-10 space-y-6">
+
+                <div className="bg-amber-500/10 border border-amber-500/20 p-4 rounded-2xl flex gap-3 backdrop-blur-sm">
+                    <div className="bg-amber-500/20 p-2.5 rounded-xl h-fit text-amber-500">
+                        <WifiOff size={20} />
+                    </div>
+                    <div>
+                        <h3 className="font-bold text-amber-500 text-sm">Modo Sin Conexión</h3>
+                        <p className="text-xs text-amber-200/70 mt-1 leading-relaxed">
+                            Esta auditoría se guardará localmente. Podrás sincronizarla cuando recuperes la conexión a internet.
+                        </p>
+                    </div>
+                </div>
+
                 <form onSubmit={handleSave} className="space-y-6">
                     {/* General Info */}
-                    <div className="bg-white p-6 rounded-xl shadow-sm space-y-4">
-                        <h2 className="font-bold text-slate-900 mb-4">Información General</h2>
-
-
+                    <div className="bg-slate-900/50 backdrop-blur-xl p-6 rounded-2xl border border-slate-800 shadow-xl space-y-5">
+                        <h4 className="text-xs font-bold text-cyan-500 uppercase tracking-widest mb-2 flex items-center gap-2">
+                            <span className="w-1.5 h-1.5 rounded-full bg-cyan-500"></span> Información General
+                        </h4>
 
                         <div>
-                            <label className="block text-sm font-bold text-slate-900 mb-1">Título de Referencia</label>
+                            <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Título de Referencia</label>
                             <input
                                 type="text"
-                                className="w-full bg-white border border-slate-300 rounded-lg py-3 px-4 focus:outline-none focus:border-indigo-500 text-black placeholder-slate-500 font-medium"
+                                className="w-full p-3.5 bg-slate-950/50 border border-slate-700/50 rounded-xl focus:ring-1 focus:ring-cyan-500/50 focus:border-cyan-500/50 outline-none text-white placeholder-slate-600 font-medium transition-all"
                                 value={auditData.title}
                                 onChange={(e) => setAuditData({ ...auditData, title: e.target.value })}
                                 placeholder="Ej. Auditoría Q1"
@@ -183,22 +203,22 @@ const OfflineAudit = () => {
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-sm font-bold text-slate-900 mb-1">Área *</label>
+                                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Área *</label>
                                 <input
                                     type="text"
                                     required
-                                    className="w-full bg-white border border-slate-300 rounded-lg py-3 px-4 focus:outline-none focus:border-indigo-500 text-black placeholder-slate-500 font-medium"
+                                    className="w-full p-3.5 bg-slate-950/50 border border-slate-700/50 rounded-xl focus:ring-1 focus:ring-cyan-500/50 focus:border-cyan-500/50 outline-none text-white placeholder-slate-600 font-medium transition-all"
                                     value={auditData.area}
                                     onChange={(e) => setAuditData({ ...auditData, area: e.target.value })}
                                     placeholder="Ej. Producción"
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-bold text-slate-900 mb-1">Auditor *</label>
+                                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Auditor *</label>
                                 <input
                                     type="text"
                                     required
-                                    className="w-full bg-white border border-slate-300 rounded-lg py-3 px-4 focus:outline-none focus:border-indigo-500 text-black placeholder-slate-500 font-medium"
+                                    className="w-full p-3.5 bg-slate-950/50 border border-slate-700/50 rounded-xl focus:ring-1 focus:ring-cyan-500/50 focus:border-cyan-500/50 outline-none text-white placeholder-slate-600 font-medium transition-all"
                                     value={auditData.auditor}
                                     onChange={(e) => setAuditData({ ...auditData, auditor: e.target.value })}
                                     placeholder="Tu Nombre"
@@ -207,11 +227,11 @@ const OfflineAudit = () => {
                         </div>
 
                         <div>
-                            <label className="block text-sm font-bold text-slate-900 mb-1">Fecha *</label>
+                            <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Fecha *</label>
                             <input
                                 type="date"
                                 required
-                                className="w-full bg-white border border-slate-300 rounded-lg py-3 px-4 focus:outline-none focus:border-indigo-500 text-black font-medium"
+                                className="w-full p-3.5 bg-slate-950/50 border border-slate-700/50 rounded-xl focus:ring-1 focus:ring-cyan-500/50 focus:border-cyan-500/50 outline-none text-white font-medium transition-all [color-scheme:dark]"
                                 value={auditData.date}
                                 onChange={(e) => setAuditData({ ...auditData, date: e.target.value })}
                             />
@@ -221,36 +241,36 @@ const OfflineAudit = () => {
                     {/* Sections S1-S5 */}
                     <div className="space-y-4">
                         {['S1', 'S2', 'S3', 'S4', 'S5'].map((section) => (
-                            <div key={section} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                            <div key={section} className="bg-slate-900/40 backdrop-blur-sm rounded-xl shadow-sm border border-slate-800 overflow-hidden transition-all hover:border-slate-700">
                                 <button
                                     type="button"
                                     onClick={() => setExpandedSection(expandedSection === section ? null : section)}
-                                    className={`w-full flex justify-between items-center p-4 text-left transition-colors ${expandedSection === section ? 'bg-indigo-50 text-indigo-900' : 'bg-white text-slate-900 hover:bg-slate-50'
+                                    className={`w-full flex justify-between items-center p-4 text-left transition-colors ${expandedSection === section ? 'bg-cyan-950/30 text-cyan-400' : 'text-slate-300 hover:bg-slate-800/50'
                                         }`}
                                 >
                                     <span className="font-bold text-lg">{section}</span>
-                                    {expandedSection === section ? <ChevronUp /> : <ChevronDown />}
+                                    {expandedSection === section ? <ChevronUp className="text-cyan-500" /> : <ChevronDown className="text-slate-600" />}
                                 </button>
 
                                 {expandedSection === section && (
-                                    <div className="p-4 bg-slate-50 space-y-4">
+                                    <div className="p-4 bg-slate-950/30 space-y-4 border-t border-slate-800">
                                         {auditData.entries[section]?.map((entry, idx) => (
-                                            <div key={idx} className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
+                                            <div key={idx} className="bg-slate-900 p-4 rounded-xl border border-slate-800 shadow-sm relative group">
                                                 <div className="flex flex-col gap-3">
-                                                    <div className="flex justify-between items-start gap-2">
+                                                    <div className="flex justify-between items-start gap-3">
                                                         <div className="flex-1">
-                                                            <label className="text-xs text-slate-600 uppercase font-bold mb-1 block">Pregunta</label>
+                                                            <label className="text-[10px] text-slate-500 uppercase font-bold mb-1 block">Pregunta</label>
                                                             <input
                                                                 type="text"
-                                                                className="w-full border-b border-slate-300 focus:border-indigo-500 py-1 text-sm text-black font-medium focus:outline-none"
+                                                                className="w-full bg-transparent border-b border-slate-700 focus:border-cyan-500 py-1 text-sm text-white font-medium focus:outline-none transition-colors"
                                                                 value={entry.question}
                                                                 onChange={(e) => updateEntry(section, idx, 'question', e.target.value)}
                                                             />
                                                         </div>
                                                         <div className="w-20">
-                                                            <label className="text-xs text-slate-600 uppercase font-bold mb-1 block text-center">Nota</label>
+                                                            <label className="text-[10px] text-slate-500 uppercase font-bold mb-1 block text-center">Nota</label>
                                                             <select
-                                                                className="w-full bg-slate-100 border border-slate-200 rounded py-1 px-2 text-center font-bold text-indigo-800"
+                                                                className="w-full bg-slate-950 border border-slate-700 rounded-lg py-1 px-2 text-center font-bold text-cyan-400 focus:border-cyan-500 outline-none"
                                                                 value={entry.score}
                                                                 onChange={(e) => updateEntry(section, idx, 'score', parseInt(e.target.value))}
                                                             >
@@ -263,14 +283,14 @@ const OfflineAudit = () => {
                                                         <input
                                                             type="text"
                                                             placeholder="Observaciones..."
-                                                            className="flex-1 bg-white border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 text-black placeholder-slate-500"
+                                                            className="flex-1 bg-slate-950/50 border border-slate-700/50 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-cyan-500/50 text-slate-300 placeholder-slate-600"
                                                             value={entry.comment || ''}
                                                             onChange={(e) => updateEntry(section, idx, 'comment', e.target.value)}
                                                         />
                                                         <button
                                                             type="button"
                                                             onClick={() => removeQuestion(section, idx)}
-                                                            className="text-red-400 hover:text-red-600 p-2"
+                                                            className="text-red-400/70 hover:text-red-400 p-2 hover:bg-red-400/10 rounded-lg transition-colors"
                                                         >
                                                             <Trash2 size={16} />
                                                         </button>
@@ -281,7 +301,7 @@ const OfflineAudit = () => {
                                         <button
                                             type="button"
                                             onClick={() => addQuestion(section)}
-                                            className="w-full py-3 border-2 border-dashed border-indigo-200 rounded-lg text-indigo-500 font-medium hover:bg-indigo-50 flex items-center justify-center gap-2"
+                                            className="w-full py-3 border-2 border-dashed border-slate-700 rounded-xl text-slate-400 font-medium hover:bg-slate-800/50 hover:text-cyan-400 hover:border-cyan-500/30 flex items-center justify-center gap-2 transition-all"
                                         >
                                             <Plus size={18} /> Agregar Criterio
                                         </button>
@@ -295,10 +315,11 @@ const OfflineAudit = () => {
                     <button
                         type="submit"
                         disabled={loading}
-                        className="fixed bottom-6 right-6 left-6 md:left-auto md:w-64 bg-indigo-600 text-white py-4 rounded-xl shadow-xl shadow-indigo-500/30 font-bold text-lg flex items-center justify-center gap-2 hover:bg-indigo-700 transition-transform active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed z-20"
+                        className="fixed bottom-6 right-6 left-6 md:left-auto md:w-80 md:right-auto md:transform md:-translate-x-0 md:relative md:mx-auto bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-500 hover:to-cyan-500 text-white py-4 rounded-xl shadow-lg shadow-cyan-500/20 font-bold text-lg flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed z-20"
                     >
                         {loading ? 'Guardando...' : <><Save /> Guardar Auditoría</>}
                     </button>
+                    <div className="h-10 md:hidden"></div>
                 </form>
             </main>
         </div>

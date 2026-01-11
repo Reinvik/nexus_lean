@@ -63,7 +63,7 @@ class OfflineService {
                         }
 
                         companies.forEach(company => {
-                            const request = store.add(company);
+                            const request = store.put(company);
                             request.onsuccess = () => {
                                 count++;
                                 if (count === companies.length) resolve();

@@ -39,7 +39,7 @@ const HeaderWithFilter = ({ title, subtitle, children }) => {
                                 onChange={(e) => setGlobalFilterCompanyId(e.target.value)}
                                 className="bg-transparent border-none text-sm font-bold text-slate-700 focus:ring-0 cursor-pointer outline-none w-full p-0 py-1 truncate appearance-none"
                             >
-                                {companies.map(c => (
+                                {[...new Map(companies.map(item => [item.id, item])).values()].map(c => (
                                     <option key={c.id} value={c.id}>{c.name}</option>
                                 ))}
                             </select>
